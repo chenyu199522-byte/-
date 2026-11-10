@@ -1,0 +1,20 @@
+.finance-filter-trigger {display:flex;align-items:center;justify-content:space-between;gap:8px;width:100%;min-width:0;text-align:left;}
+.finance-filter-trigger > span {overflow-wrap:anywhere;}
+.finance-filter-trigger > svg {flex-shrink:0;color:#a2aec1;}
+.finance-filter-menu {position:fixed;z-index:10000;display:flex;flex-direction:column;padding:6px;box-sizing:border-box;border:1px solid #ffffff24;border-radius:14px;background:#252d3af5;backdrop-filter:blur(24px);box-shadow:0 16px 48px #0007,0 2px 8px #0004;color:#edf1f7;font-family:system-ui,sans-serif;line-height:1.45;}
+.finance-filter-menu-heading {padding:6px 12px 8px;color:#acb7c8;font-size:11px;font-weight:550;}
+.finance-filter-menu-search {display:flex;align-items:center;gap:8px;padding:7px 10px;margin:0 5px 6px;background:#10182480;border:1px solid #ffffff12;border-radius:8px;flex-shrink:0;color:#a2aec1;}
+.finance-filter-menu-search > input {width:100%;min-width:0;background:transparent;border:0;color:#edf1f7;font:inherit;outline:none;}
+.finance-filter-menu-search:focus-within {border-color:#81baff;}
+.finance-filter-menu-options {min-height:0;overflow-y:auto;overscroll-behavior:contain;scrollbar-width:thin;scrollbar-color:#5c6b80 transparent;scrollbar-gutter:stable;}
+.finance-filter-menu-options > button {display:grid;grid-template-columns:20px minmax(0,1fr);align-items:center;column-gap:8px;width:100%;min-height:36px;padding:8px 10px;border:0;border-radius:7px;background:transparent;color:inherit;text-align:left;font:inherit;overflow-wrap:anywhere;}
+.finance-filter-menu-check {display:grid;place-items:center;color:#9bc7ff;}
+.finance-filter-menu-options > button[aria-selected=true] {background:#729dd01c;color:#d7e8ff;font-weight:600;}
+.finance-filter-menu-options > button:focus-visible {outline:none;background:#416b9c;color:#fff;}
+.finance-filter-menu-options > button:active {background:#416b9c;}
+.finance-filter-menu-group {margin:6px 8px 4px;padding:9px 30px 0;border-top:1px solid #ffffff12;color:#a5b2c5;font-size:11px;}
+.finance-filter-menu-empty {padding:14px 12px;color:#acb7c8;}
+.finance-filter-trigger:focus-visible {outline:2px solid #9bc7ff;outline-offset:3px;}
+@media(hover:hover) and (pointer:fine) {.finance-filter-menu-options > button:hover {background:#ffffff12;}}
+@media(prefers-reduced-transparency:reduce) {.finance-filter-menu {background:#252d3a;backdrop-filter:none;}}
+@media(prefers-contrast:more) {.finance-filter-menu {background:#19212d;border-color:#adb9ca;}}

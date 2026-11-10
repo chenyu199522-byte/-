@@ -1,0 +1,19 @@
+@tailwind base;
+@tailwind utilities;
+:root {
+  color-scheme: dark;
+  --color-slate-900: 17 22 41;
+  --color-slate-800: 31 36 57;
+  --color-slate-400: 158 170 194;
+  --color-slate-300: 195 205 225;
+  --color-primary: 118 112 245;
+  --radius-small: 6px;
+  --radius-control: 10px;
+  --radius-group: 16px;
+  font-family: "Segoe UI", "Microsoft YaHei UI", sans-serif;
+}
+body { margin: 0; color: #e8eef8; background: linear-gradient(125deg, #0c1220, #17172f 62%, #2d1a30); }
+#root { height: 100vh; padding: clamp(16px, 2vw, 36px); box-sizing: border-box; }
+#root > [role=alert] { padding: 20px; }
+.br-root { min-width: 0; }
+@media (max-height: 600px) { #root { min-height: 600px; } }

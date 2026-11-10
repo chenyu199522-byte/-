@@ -1,0 +1,10 @@
+KatanOS © 2020-2026 Kevin Ricchiuto
+Licensed under the Apache License, Version 2.0.
+
+Golden Fleece is a standalone adaptation of the KatanOS / Housekeeper bank rewards module.
+It adds an independent desktop shell, local-only record storage and packaging.
+
+Bank reward tracking incorporates ideas and adapted logic from Bank Bonus Tracker (commit 42de84e),
+https://github.com/pumpkinperson996/bank-bonus-tracker, under the MIT license.
+Full license texts for the adapted module and bundled renderer dependencies are in licenses/.
+Electron and Chromium licenses are included in the desktop distribution.

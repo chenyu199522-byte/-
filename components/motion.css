@@ -1,0 +1,19 @@
+:root {--ease-out:cubic-bezier(0.23,1,0.32,1);--ease-drawer:cubic-bezier(0.32,0.72,0,1);}
+.hk-notification[data-exiting=true] {pointer-events:none;}
+.hk-modal-presence {display:contents;}
+.hk-modal-presence[data-exiting=true] > * {pointer-events:none!important;}
+/* One animation owner: don't stack legacy entrance keyframes with WAAPI. */
+.hk-modal-presence > *, .hk-modal-presence > :not(dialog) > * {animation:none!important;}
+.hk-reveal {display:grid;grid-template-rows:0fr;transition:grid-template-rows 200ms var(--ease-out);}
+.hk-reveal[data-open=true] {grid-template-rows:1fr;}
+.hk-reveal-clip {min-height:0;overflow:hidden;}
+.hk-reveal-content {opacity:0;transition:opacity 200ms var(--ease-out);}
+.hk-reveal[data-open=true] > .hk-reveal-clip > .hk-reveal-content {opacity:1;}
+.hk-reveal[data-instant=true], .hk-reveal[data-instant=true] > .hk-reveal-clip > .hk-reveal-content {transition:none;}
+.hk-chevron {transition:transform 160ms var(--ease-out);}
+[aria-expanded=true] > .hk-chevron {transform:rotate(90deg);}
+:root[data-motion-input=keyboard] .hk-chevron {transition:none;}
+@media(prefers-reduced-motion:reduce) {
+  .hk-reveal,.hk-chevron {transition:none;}
+  .hk-reveal-content {transition:opacity 150ms var(--ease-out);}
+}

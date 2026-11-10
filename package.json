@@ -1,0 +1,74 @@
+{
+  "name": "golden-fleece-records",
+  "productName": "金羊毛",
+  "version": "1.0.0",
+  "description": "银行开户、工资直存与奖励进度记录",
+  "author": "Golden Fleece contributors",
+  "license": "Apache-2.0",
+  "private": true,
+  "main": "main.cjs",
+  "type": "module",
+  "scripts": {
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit",
+    "build": "vite build",
+    "package:win": "npm run typecheck && npm run build && electron-builder --win nsis zip --x64",
+    "test:desktop": "node scripts/desktop-test.cjs"
+  },
+  "devDependencies": {
+    "@types/node": "22.19.3",
+    "@types/react": "19.2.2",
+    "@types/react-dom": "19.2.2",
+    "@vitejs/plugin-react": "5.1.2",
+    "autoprefixer": "10.4.23",
+    "electron": "39.2.7",
+    "electron-builder": "24.13.3",
+    "lucide-react": "0.562.0",
+    "playwright": "1.63.0",
+    "postcss": "8.5.6",
+    "react": "19.2.3",
+    "react-dom": "19.2.3",
+    "tailwindcss": "3.4.19",
+    "typescript": "5.8.3",
+    "vite": "6.4.1",
+    "vitest": "4.0.17"
+  },
+  "build": {
+    "appId": "com.katanos.goldenfleece",
+    "productName": "金羊毛",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**",
+      "main.cjs",
+      "preload.cjs",
+      "package.json",
+      "LICENSE",
+      "NOTICE",
+      "licenses/**"
+    ],
+    "electronDist": "node_modules/electron/dist",
+    "win": {
+      "icon": "assets/icon.ico",
+      "target": [
+        "nsis"
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowElevation": false,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "runAfterFinish": false,
+      "deleteAppDataOnUninstall": false,
+      "artifactName": "GoldenFleece-${version}-Windows-x64-Setup.${ext}",
+      "installerLanguages": [
+        "zh_CN",
+        "en_US"
+      ]
+    },
+    "artifactName": "GoldenFleece-${version}-Windows-x64.${ext}"
+  }
+}
