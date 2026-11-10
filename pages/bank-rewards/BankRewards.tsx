@@ -20,6 +20,7 @@ import {
   Archive,
   ArrowUpRight,
   Wallet,
+  SlidersHorizontal,
 } from "lucide-react";
 import type { User } from "../../types";
 import ModalPortal from "../../components/ModalPortal";
@@ -65,6 +66,8 @@ import {
 } from "./ui";
 import "./bank-rewards.css";
 import { compareRewardRows, rewardColumnSorts } from '../../services/bank-rewards/sorting';
+import {LayoutEditor} from '../../components/LayoutEditor';
+import {columns, visibleColumns, type ColumnId, type Layout} from '../../services/layout';
 const filters = [
   ["all", "全部"],
   ["active", "进行中"],
@@ -73,8 +76,32 @@ const filters = [
   ["eligible", "可重奖"],
   ["archived", "已归档"],
 ];
-export default function BankRewards({ user, focus }: { user: User; focus?: {offerId?:string;accountId?:string;nonce:number} }) {
+export default function BankRewards({ user, focus, initialLayout }: { user: User; initialLayout: Layout; focus?: {offerId?:string;accountId?:string;nonce:number} }) {
   const today = useLocalToday();
+  const [savedLayout, setSavedLayout] = useState(initialLayout);
+  const [draft, setDraft] = useState<Layout | null>(null);
+  const [width,setWidth] = useState(window.innerWidth);
+  const [showAll,setShowAll] = useState(false);
+  const layout = draft ?? savedLayout;
+  useEffect(()=>{
+    const resize=()=>setWidth(window.innerWidth);
+    window.addEventListener('resize',resize);
+    return ()=>window.removeEventListener('resize',resize);
+  },[]);
+  useEffect(()=>{
+    void window.goldenFleece.previewScale(layout.scaleWithWindow).catch(()=>{});
+  },[layout.scaleWithWindow]);
+  React.useLayoutEffect(()=>{
+    const style=document.documentElement.style;
+    style.fontSize = (16 * layout.font / 100) + 'px';
+    style.setProperty('--layout-margin', layout.margin+'px');
+    style.setProperty('--layout-gap', layout.gap+'px');
+    style.setProperty('--layout-card', layout.cardWidth+'px');
+    style.setProperty('--layout-row', layout.rowHeight+'px');
+  },[layout]);
+  const shown = visibleColumns(layout,width,showAll);
+  const totalWidth = shown.reduce((sum,c)=>sum+c.width,0);
+  const condensed = visibleColumns(layout,width,false).length < layout.columns.filter(c=>c.visible).length;
   const [state, setState] = useState(() => rewardRepository.read(user.id)),
     [activityView,setActivityView] = useState<"one_time"|"long_term">("one_time"),
     [filter, setFilter] = useState("active"),
@@ -274,12 +301,18 @@ export default function BankRewards({ user, focus }: { user: User; focus?: {offe
             <Download size={16} />
             导出 CSV
           </button>
+          <button onClick={()=>setDraft(savedLayout)}><SlidersHorizontal size={16}/>编辑布局</button>
           <button onClick={() => setShowRules(true)}>
             <Info size={16} />
             规则
           </button>
         </div>
       </header>
+      {draft && <LayoutEditor value={draft} onChange={setDraft} onCancel={()=>setDraft(null)} onSave={async()=>{
+        await window.goldenFleece.saveLayout(draft);
+        setSavedLayout(draft);
+        setDraft(null);
+      }}/>}
       {notice && (
         <p role="status" className="br-text-teal">
           {notice}
@@ -330,7 +363,9 @@ export default function BankRewards({ user, focus }: { user: User; focus?: {offe
             tone: "cyan",
             Icon: BarChart3,
           },
-        ].map((c) => (
+        ].filter(c=>layout.cards.some(item=>item.id===c.label && item.visible))
+          .sort((a,b)=>layout.cards.findIndex(c=>c.id===a.label)-layout.cards.findIndex(c=>c.id===b.label))
+          .map((c) => (
           <article className={`br-stat tone-${c.tone}`} key={c.label}>
             <c.Icon className="br-stat-icon" size={23} />
             <span>{c.label}</span>
@@ -398,22 +433,12 @@ export default function BankRewards({ user, focus }: { user: User; focus?: {offe
       </div>
       <div className="br-table-frame">
         <div className="br-table-scroll">
-          <table className="br-table">
+          <table className="br-table" style={{minWidth:totalWidth}}>
+            <colgroup>{shown.map(c=><col key={c.id} style={{width:(100*c.width/totalWidth)+'%'}}/>)}</colgroup>
             <thead>
               <tr>
-                {[
-                  "机构 / 活动",
-                  "奖励金额",
-                  "DD 要求",
-                  "进度 / 截止",
-                  "开户日期",
-                  "奖励到账期限",
-                  "最低持有",
-                  "安全关户",
-                  "重复奖励资格",
-                  "状态",
-                  "操作",
-                ].map((h) => {
+                {shown.map(({id}) => {
+                  const h = columns.find(c=>c.id===id)!.label;
                   const column = rewardColumnSorts[h];
                   const selected = column?.key === sort;
                   return <th key={h} scope="col" aria-sort={column ? (selected ? column.direction : 'none') : undefined}>
@@ -439,19 +464,8 @@ export default function BankRewards({ user, focus }: { user: User; focus?: {offe
                         }
                       : null,
                   progress = dd?.done ? 1 : dd?.ratio || 0;
-                return (
-                  <React.Fragment key={o.id}><tr
-                    data-testid="reward-row"
-                    tabIndex={0}
-                    aria-label={`查看活动：${o.bankName} ${o.productName}`}
-                    onKeyDown={event => {
-                      if (event.target === event.currentTarget && (event.key === "Enter" || event.key === " ")) {
-                        event.preventDefault(); setDetail({ offerId: o.id, accountId: a?.id });
-                      }
-                    }}
-                    onClick={() => setDetail({ offerId: o.id, accountId: a?.id })}
-                  >
-                    <td>
+                const cells: Record<ColumnId,React.ReactElement> = {
+                  bank: <td>
                       <div className="br-bank-cell">
                         <BankMark name={o.bankName} />
                         <div>
@@ -474,21 +488,21 @@ export default function BankRewards({ user, focus }: { user: User; focus?: {offe
                           </div>
                         </div>
                       </div>
-                    </td>
-                    <td>
+                    </td>,
+                  reward: <td>
                       <strong className="br-money">
                         {money(o.bonusCents, o.currency)}
                       </strong>
-                    </td>
-                    <td>
+                    </td>,
+                  requirements: <td>
                       <span>
                         {o.rewardCycleCount ? `每期工资 DD ≥ ${money(o.ddAmountCents,o.currency)}` : money(o.ddAmountCents, o.currency)}
                         {!o.rewardCycleCount && o.ddCount !== null && ` × ${o.ddCount} 次`}
                       </span>
                       {o.rewardCycleCount ? <><small>每期借记卡消费 ≥ {money(o.cycleDebitCents ?? 0,o.currency)}</small><small>{cycleBasisLabels[o.cycleBasis || "opening"]} · 连续 {o.rewardCycleCount} 期</small></> : <small>开户奖励 · 合格直接存款</small>}
                       {o.feeNote && <small>免月费 · {o.feeNote}{o.monthlyFee && `（月费 ${o.monthlyFee}）`}</small>}
-                    </td>
-                    <td className="br-progress-cell">
+                    </td>,
+                  progress: <td className="br-progress-cell">
                       <strong
                         className={`br-text-${a?.bonusReceivedOn ? "purple" : dd?.late ? "red" : dd?.near ? "amber" : "teal"}`}
                       >
@@ -520,16 +534,16 @@ export default function BankRewards({ user, focus }: { user: User; focus?: {offe
                           !a?.historyOnly &&
                           (o.rewardCycleCount ? ` · ${dd.count}/${o.rewardCycleCount} 期` : ` · ${dd.count}/${o.ddCount ?? "—"} 笔`)}
                       </small>
-                    </td>
-                    <td>
+                    </td>,
+                  opened: <td>
                       <span>{a?.openedOn || "—"}</span>
                       <small>
                         {a
                           ? `已开户 ${formatDuration(a.openedOn, today)}`
                           : "尚未开户"}
                       </small>
-                    </td>
-                    <td>
+                    </td>,
+                  payout: <td>
                       <span>{o.payoutDays != null && `${payout.anchorLabel} · `}{payoutTermLabel(o)}</span>
                       <small
                         className={a?.bonusReceivedOn ? "br-text-teal" : ""}
@@ -538,8 +552,8 @@ export default function BankRewards({ user, focus }: { user: User; focus?: {offe
                           ? `已到账 ${a.bonusReceivedOn} · ${money(a.bonusReceivedCents, o.currency)}`
                           : payout.date ? `${payout.dateLabel} ${payout.date}` : dd?.done ? "已达标 · 未到账" : o.payoutDays != null ? payout.pendingLabel : "未到账"}
                       </small>
-                    </td>
-                    <td>
+                    </td>,
+                  hold: <td>
                       <span>
                         {hold
                           ? `${hold.days} / ${hold.total} 天`
@@ -558,8 +572,8 @@ export default function BankRewards({ user, focus }: { user: User; focus?: {offe
                             : "持有中"
                           : "规则待核对"}
                       </small>
-                    </td>
-                    <td>
+                    </td>,
+                  close: <td>
                       <strong
                         className={
                           a?.closedOn || (safe && safe <= today)
@@ -576,8 +590,8 @@ export default function BankRewards({ user, focus }: { user: User; focus?: {offe
                             : "—"}
                       </strong>
                       <small>{a?.closedOn || safe || "未记录规则"}</small>
-                    </td>
-                    <td>
+                    </td>,
+                  repeat: <td>
                       <span>
                         {o.repeatable === false
                           ? "不可重复"
@@ -599,11 +613,11 @@ export default function BankRewards({ user, focus }: { user: User; focus?: {offe
                             ? "暂不满足"
                             : "需要核验"}
                       </span>
-                    </td>
-                    <td>
+                    </td>,
+                  status: <td>
                       <Badge tone={status.tone}>{status.label}</Badge>
-                    </td>
-                    <td
+                    </td>,
+                  actions: <td
                       className="br-row-actions"
                       onClick={(e) => e.stopPropagation()}
                     >
@@ -706,9 +720,23 @@ export default function BankRewards({ user, focus }: { user: User; focus?: {offe
                             ))}
                           </div>
                         </>}</ModalPortal>
-                    </td>
+                    </td>,
+                };
+                return (
+                  <React.Fragment key={o.id}><tr
+                    data-testid="reward-row"
+                    tabIndex={0}
+                    aria-label={`查看活动：${o.bankName} ${o.productName}`}
+                    onKeyDown={event => {
+                      if (event.target === event.currentTarget && (event.key === "Enter" || event.key === " ")) {
+                        event.preventDefault(); setDetail({ offerId: o.id, accountId: a?.id });
+                      }
+                    }}
+                    onClick={() => setDetail({ offerId: o.id, accountId: a?.id })}
+                  >
+                    {shown.map(c=><React.Fragment key={c.id}>{cells[c.id]}</React.Fragment>)}
                   </tr>
-                  {a && dd && !a.historyOnly && !!dd.periods.length && <tr className="br-condition-row"><td colSpan={11}>
+                  {a && dd && !a.historyOnly && !!dd.periods.length && <tr className="br-condition-row"><td colSpan={shown.length}>
                     <ConditionProgress key={a.id} offer={o} account={a} dd={dd} today={today}/>
                   </td></tr>}</React.Fragment>
                 );
@@ -741,6 +769,8 @@ export default function BankRewards({ user, focus }: { user: User; focus?: {offe
             显示 {rows.length ? (current - 1) * pageSize + 1 : 0}–
             {Math.min(current * pageSize, rows.length)}，共 {rows.length} 条活动
           </span>
+          {condensed && <button className="br-expand-columns" aria-pressed={showAll} onClick={()=>setShowAll(!showAll)}>
+            {showAll ? '恢复精简列' : '显示全部列'}</button>}
           <div className="br-pagination">
             <button
               className="br-icon-button"

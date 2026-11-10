@@ -5,6 +5,9 @@ declare global {
   interface Window {
     katanos?: {exportBankRewardsCsv(text: string, name: string): Promise<{canceled: boolean}>};
     goldenFleece: {
+      previewScale(enabled: boolean): Promise<void>;
+      readLayout(): Promise<unknown>;
+      saveLayout(layout: import('./layout').Layout): Promise<void>;
       read(): Promise<{state: RewardState | null; revision: string | null}>;
       save(state: RewardState, revision: string | null): Promise<string>;
     };
