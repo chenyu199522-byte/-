@@ -118,13 +118,7 @@ export default function ConditionProgress({offer,account,dd,today,detail=false,o
         : <p>{!!offer.feeFreeCycles && `开户前 ${offer.feeFreeCycles} 期免月费。`}{!!offer.feeGoalCents && <>每期{offer.feeMetric==='credit'?'信用卡消费':offer.feeMetric==='debit'?'借记卡消费':'工资 DD'} ≥ {money(offer.feeGoalCents,offer.currency)}。</>}{offer.feeBasis==='statement'?'待填写账单结账日。':'待确认计算周期。'}</p>}
     </section>}
   </div>
-    {compact && (reminders.length>0||offer.requirements||offer.additionalConditions) && <details className="br-condition-notes"><summary>补充说明{offer.additionalConditions && !account.additionalConditionsMetOn ? ' · 有其他条件待核对' : ''}</summary>
-      {reminders.map(([label,value])=><p key={label}><b>{label}</b> · {value}</p>)}
-      {offer.additionalConditions&&<p>{account.additionalConditionsMetOn?'✓ 已核对 '+account.additionalConditionsMetOn:'待核对'} · {offer.additionalConditions}</p>}
-      {offer.requirements&&<p>{offer.requirements}</p>}
-      {offer.rewardMode==='separate'&&<p>DD / 消费奖励 {money(offer.ddBonusCents??null,offer.currency)} · {account.componentReceipts?.dd?'已到账 '+account.componentReceipts.dd.date:'待到账'}</p>}
-    </details>}
-    {!compact && (reminders.length>0||offer.requirements||offer.additionalConditions) && <aside className="br-condition-reminders" aria-label="规则与提醒">
+    {detail && (reminders.length>0||offer.requirements||offer.additionalConditions) && <aside className="br-condition-reminders" aria-label="规则与提醒">
       <h3>规则与提醒</h3>
       {reminders.map(([label,value])=><div className="br-reminder-line" key={label}><span>{label}</span><strong>{value}</strong></div>)}
       {offer.additionalConditions && <div className="br-extra-conditions"><span>{account.additionalConditionsMetOn?'✓ 已核对 '+account.additionalConditionsMetOn:'待核对'}</span><p>{offer.additionalConditions}</p></div>}

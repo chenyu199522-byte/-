@@ -761,7 +761,7 @@ export default function BankRewards({ user, focus, initialLayout }: {
                   >
                     {shown.map(c=><React.Fragment key={c.id}>{cells[c.id]}</React.Fragment>)}
                   </tr>
-                  {a && dd && !a.historyOnly && (!!dd.periods.length || !!o.cycleCreditCents || !!o.depositGoalCents || !!o.transactionGoal || !!o.promoCode || !!o.additionalConditions || !!o.requirements) && <tr className="br-condition-row"><td colSpan={shown.length}>
+                  {a && dd && !a.historyOnly && (!!dd.periods.length || !!o.cycleCreditCents || !!o.depositGoalCents || !!o.transactionGoal || (hasMultipleConditions(o) && !!o.ddAmountCents)) && <tr className="br-condition-row"><td colSpan={shown.length}>
                     <ConditionProgress key={a.id} offer={o} account={a} dd={dd} today={today} onDepositAction={edit=>doAction(edit?"balance-edit":"balance",o,a)}/>
                   </td></tr>}</React.Fragment>
                 );

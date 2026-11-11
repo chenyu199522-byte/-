@@ -30,10 +30,10 @@ it('uses one short DD cell for multiple conditions, but keeps a single DD and pe
 
 it('keeps supplementary terms accessible and preserves the full account detail view',()=>{
  const s=createTestBank('local',day),o=s.offers[0],a=s.accounts[0];
- const html=progress(s);expect(html).toContain('<details class="br-condition-notes">');expect(html).toContain('TEST1500');expect(html).toContain(o.earlyClosePenalty!);expect(html).not.toContain('<details class="br-condition-notes" open');
- const detail=renderToStaticMarkup(<ConditionProgress offer={o} account={a} dd={qualificationProgress(a,o,s,day)} today={day} detail/>);expect(detail).toContain('规则与提醒');
+ const html=progress(s);expect(html).not.toContain('br-condition-notes');expect(html).not.toContain('TEST1500');expect(html).not.toContain(o.earlyClosePenalty!);
+ const detail=renderToStaticMarkup(<ConditionProgress offer={o} account={a} dd={qualificationProgress(a,o,s,day)} today={day} detail/>);expect(detail).toContain('规则与提醒');expect(detail).toContain('TEST1500');expect(detail).toContain(o.earlyClosePenalty!);
  let single=s;for(const g of requirementGroups)if(!['dd','notes'].includes(g.id))single=toggleTestRequirement(single,g.id,false);
- expect(progress(single)).toContain('规则与提醒');
+ expect(progress(single)).not.toContain('规则与提醒');
 });
 it('retains a DD meter when a non-monthly DD is combined with a deposit condition',()=>{
  let s=createTestBank('local',day);for(const g of requirementGroups)if(!['dd','deposit'].includes(g.id))s=toggleTestRequirement(s,g.id,false);

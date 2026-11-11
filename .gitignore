@@ -8,3 +8,5 @@ test-results/
 docs/qa/*
 !docs/qa/1.2.0.md
 !docs/qa/1.2.16.md
+!docs/qa/1.2.17.md
+backups/
