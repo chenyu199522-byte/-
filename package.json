@@ -1,7 +1,7 @@
 {
   "name": "golden-fleece-records",
   "productName": "金羊毛",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "银行开户、工资直存与奖励进度记录",
   "author": "Golden Fleece contributors",
   "license": "Apache-2.0",
@@ -14,7 +14,10 @@
     "build": "vite build",
     "package:win": "npm run typecheck && npm run build && electron-builder --win nsis zip --x64",
     "test:desktop": "node scripts/desktop-test.cjs",
-    "test:layout": "node scripts/layout-test.cjs"
+    "test:layout": "node scripts/layout-test.cjs",
+    "test:features": "node scripts/features-test.cjs",
+    "test:ai": "node scripts/ai-test.cjs",
+    "test:deposit": "node scripts/deposit-test.cjs"
   },
   "devDependencies": {
     "@types/node": "22.19.3",
@@ -45,6 +48,9 @@
       "main.cjs",
       "preload.cjs",
       "window-scale.cjs",
+      "image-store.cjs",
+      "ai-service.cjs",
+      "web-reader.cjs",
       "package.json",
       "LICENSE",
       "NOTICE",

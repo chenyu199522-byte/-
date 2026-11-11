@@ -5,6 +5,7 @@ import {loadRecords, profile} from './services/recordStore';
 import {readLayout} from './services/layout';
 import './window.css';
 import './components/layout-editor.css';
+import './pages/bank-rewards/references.css';
 
 const root = createRoot(document.getElementById('root')!);
 Promise.all([loadRecords(), window.goldenFleece.readLayout()]).then(([, settings]) => root.render(<BankRewards user={profile} initialLayout={readLayout(settings)} />)).catch(error => {

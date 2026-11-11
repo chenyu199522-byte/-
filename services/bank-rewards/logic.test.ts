@@ -428,3 +428,28 @@ it('uses the current statement separately from the bonus deadline and reevaluate
   o.feeBasis='opening';expect(calc('2028-04-02')?.start).toBe('2028-03-31');
   o.feeGoalCents=null;expect(calc('2028-02-01')?.free).toBe(true);
 });
+
+it('separates credit spending from payroll and debit across periods and fee cycles',()=>{
+  const s=fixture(),a=s.accounts[0],o=s.offers[0];
+  a.openedOn='2026-11-02';Object.assign(o,{rewardCycleCount:2,ddAmountCents:250000,cycleDebitCents:100000,cycleCreditCents:50000,feeBasis:'opening',feeMetric:'credit',feeGoalCents:50000});
+  s.ddEvents=[{id:'dd',userId:'u',accountId:a.id,date:'2026-11-03',amountCents:250000,kind:'dd',sourceNote:''},
+    {id:'debit',userId:'u',accountId:a.id,date:'2026-11-04',amountCents:100000,kind:'debit',sourceNote:''},
+    {id:'credit',userId:'u',accountId:a.id,date:'2026-11-05',amountCents:50000,kind:'credit',sourceNote:''},
+    {id:'late',userId:'u',accountId:a.id,date:'2026-12-05',amountCents:50000,kind:'credit',sourceNote:''}];
+  expect(ddProgress(a,o,s,'2026-11-04').periods[0].metOn).toBeNull();
+  const p=ddProgress(a,o,s,'2026-11-05');expect(p.periods[0]).toMatchObject({deposits:250000,spending:100000,creditSpending:50000,metOn:'2026-11-05'});
+  expect(p.totalCents).toBe(250000);expect(p.periods[1].creditSpending).toBe(0);expect(p.done).toBe(false);
+  expect(feeProgress(a,o,s.ddEvents,'2026-11-05')?.amount).toBe(50000);
+  validateState(s,'2026-12-10');
+});
+it('supports credit-only one-time offers and uses the later condition completion date',()=>{
+ const s=fixture(),a=s.accounts[0],o=s.offers[0];a.openedOn='2026-09-01';
+ Object.assign(o,{ddAmountCents:null,ddCount:null,cycleCreditCents:100000,deadlineDays:30});
+ s.ddEvents=[{id:'c1',userId:'u',accountId:a.id,date:'2026-09-05',amountCents:40000,kind:'credit',sourceNote:''},
+ {id:'c2',userId:'u',accountId:a.id,date:'2026-09-10',amountCents:60000,kind:'credit',sourceNote:''}];
+ expect(ddProgress(a,o,s,'2026-09-06')).toMatchObject({done:false,totalCents:0,ratio:.4});
+ expect(ddProgress(a,o,s,'2026-09-10')).toMatchObject({done:true,totalCents:0,last:'2026-09-10'});
+ o.ddAmountCents=50000;s.ddEvents.push({id:'d',userId:'u',accountId:a.id,date:'2026-09-15',amountCents:50000,kind:'dd',sourceNote:''});
+ expect(ddProgress(a,o,s,'2026-09-16')).toMatchObject({done:true,last:'2026-09-15'});
+ o.deadlineDays=7;expect(ddProgress(a,o,s,'2026-09-16').done).toBe(false);
+});

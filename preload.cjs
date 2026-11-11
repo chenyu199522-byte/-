@@ -1,5 +1,15 @@
 const {contextBridge, ipcRenderer} = require('electron');
 contextBridge.exposeInMainWorld('goldenFleece', {
+  aiRead: () => ipcRenderer.invoke('ai:read'),
+  aiSave: value => ipcRenderer.invoke('ai:save', value),
+  aiRemove: id => ipcRenderer.invoke('ai:remove', id),
+  aiRun: value => ipcRenderer.invoke('ai:run', value),
+  aiCancel: () => ipcRenderer.invoke('ai:cancel'),
+  selectImages: () => ipcRenderer.invoke('images:select'),
+  discardImages: ids => ipcRenderer.invoke('images:discard', ids),
+  imagePreview: (id, full) => ipcRenderer.invoke('images:preview', id, full),
+  imageExport: (id, name) => ipcRenderer.invoke('images:export', id, name),
+  previewName: name => ipcRenderer.invoke('layout:name', name),
   previewScale: enabled => ipcRenderer.invoke('layout:scale', enabled),
   readLayout: () => ipcRenderer.invoke('layout:read'),
   saveLayout: layout => ipcRenderer.invoke('layout:save', layout),

@@ -30,6 +30,8 @@ export function LayoutEditor({value, onChange, onCancel, onSave}:Props) {
     <nav aria-label="布局设置">{['页面','统计卡片','活动表格'].map(t=><button key={t} aria-pressed={t===tab} onClick={()=>setTab(t)}>{t}</button>)}</nav>
     <section className="le-scroll">
       {tab==='页面' && <>
+        <label className="le-name">软件名称<input aria-label="软件名称" maxLength={40} value={value.appName}
+          placeholder="金羊毛" onChange={e=>onChange({...value,appName:e.target.value})}/><small>用于软件首页和窗口标题</small></label>
         <label className="le-check"><input type="checkbox" checked={value.scaleWithWindow}
           onChange={e=>onChange({...value,scaleWithWindow:e.target.checked})}/>随窗口等比例缩放</label>
         <Slider label="界面字号" value={value.font} low={85} high={150} step={5} unit="%" change={font=>onChange({...value,font})}/>

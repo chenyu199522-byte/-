@@ -1,4 +1,6 @@
+import DepositRecords from './DepositRecords';
 import ConditionProgress from './ConditionProgress';
+import EvidenceImages from "./EvidenceImages";
 import SettingsSelect from "../../components/SettingsSelect";
 import React, { useState, useRef, useEffect } from "react";
 import {
@@ -20,7 +22,7 @@ import { rewardRepository } from "../../services/bank-rewards/repository";
 import {
   bankAccounts,
   countdown,
-  ddProgress, rewardPayoutSchedule, payoutTermLabel,
+  ddProgress, qualificationProgress, actualReceipts, rewardPayoutSchedule, payoutTermLabel,
   cycleBasisLabels,
   eligibility,
   money,
@@ -66,7 +68,7 @@ export function AccountDialog({
       new: "再次开户（新增账户）",
       history: "补录历史账户",
       edit: "编辑账户与历史日期",
-      dd: offer.rewardCycleCount || offer.feeMetric==="debit" ? "工资 DD / 借记卡消费" : ddEvent ? "编辑 DD 记录" : "记录 DD",
+      dd: ddEvent ? "编辑 DD / 消费记录" : "工资 DD / 卡片消费",
       receipt: "记录奖励到账",
       close: "记录关户",
     }[mode];
@@ -75,6 +77,7 @@ export function AccountDialog({
   const ddId = useRef(ddEvent?.id || crypto.randomUUID());
   const [a, setA] = useState<Partial<RewardAccount>>({
     ...account,
+    ...(offer.rewardMode==='separate'?{componentReceipts:account?.componentReceipts||{}}:{}),
     openedOn: account?.openedOn || todayISO(),
     name: account?.name || "",
     bonusReceivedOn:
@@ -100,7 +103,7 @@ export function AccountDialog({
   });
   const [date, setDate] = useState<string | null>(ddEvent?.date || todayISO()),
     [amount, setAmount] = useState<number | null>(ddEvent?.amountCents ?? offer.ddAmountCents),
-    [entryKind, setEntryKind] = useState<"debit"|"dd">(ddEvent?.kind || "dd"),
+    [entryKind, setEntryKind] = useState<"debit"|"dd"|"credit">(ddEvent?.kind || "dd"),
     [source, setSource] = useState(ddEvent?.sourceNote || ""),
     [error, setError] = useState(""),
     [busy, setBusy] = useState(false),
@@ -138,7 +141,7 @@ export function AccountDialog({
               accountId: account!.id,
               date: date || "",
               amountCents: amount ?? 0,
-              ...(entryKind==="debit" ? {kind:"debit" as const} : {}), sourceNote: source,
+              kind:entryKind, sourceNote: source,
             })
           : await rewardRepository.saveAccount(user.id, offer.id, a, { newAccount: mode === "new" || history, creationId: account ? undefined : creationId.current });
       onSaved(s);
@@ -166,14 +169,14 @@ export function AccountDialog({
         <div className="br-form-grid">
           {mode === "dd" ? (
             <>
-              {(offer.rewardCycleCount || offer.feeMetric==="debit" || ddEvent?.kind==="debit") && <Field label="记录类型"><select aria-label="记录类型" value={entryKind} onChange={e=>{setEntryKind(e.target.value as "dd"|"debit");setAmount(null);}}><option value="dd">工资直接存款</option><option value="debit">借记卡消费</option></select></Field>}
+              {<Field label="记录类型"><select aria-label="记录类型" value={entryKind} onChange={e=>{setEntryKind(e.target.value as "dd"|"debit"|"credit");setAmount(null);}}><option value="dd">工资直接存款</option><option value="debit">借记卡消费</option><option value="credit">信用卡消费</option></select></Field>}
               <DateField
-                label={entryKind==="debit" ? "消费日期 *" : "DD 到账日期 *"}
+                label={entryKind!=="dd" ? "消费日期 *" : "DD 到账日期 *"}
                 value={date}
                 onChange={setDate}
               />
               <NumberField
-                label={entryKind==="debit" ? "消费金额 *" : "到账金额 *"}
+                label={entryKind!=="dd" ? "消费金额 *" : "到账金额 *"}
                 money
                 value={amount}
                 onChange={setAmount}
@@ -182,7 +185,7 @@ export function AccountDialog({
                 <input
                   value={source}
                   onChange={(e) => setSource(e.target.value)}
-                  placeholder={entryKind==="debit" ? "例如商户名称" : "例如工资来源"}
+                  placeholder={entryKind!=="dd" ? "例如商户名称" : "例如工资来源"}
                 />
               </Field>
             </>
@@ -217,21 +220,24 @@ export function AccountDialog({
                   )}
                 </>
               )}
-              {(complete || mode === "receipt") && (
-                <>
-                  <DateField
-                    label="奖励到账日期"
-                    value={a.bonusReceivedOn || null}
-                    onChange={(v) => set("bonusReceivedOn", v)}
-                  />
-                  <NumberField
-                    label="实际到账金额"
-                    money
-                    value={a.bonusReceivedCents ?? null}
-                    onChange={(v) => set("bonusReceivedCents", v)}
-                  />
-                </>
-              )}
+              {complete && !!offer.additionalConditions && <DateField label="其他条件已核对完成日期（未完成留空）" value={a.additionalConditionsMetOn||null} onChange={v=>set('additionalConditionsMetOn',v)}/>}
+              {(complete || mode === "receipt") && (offer.rewardMode==='separate' ? <>
+                <p className="br-hint">两项奖励分别登记实际到账；未到账的日期留空。</p>
+                {(['dd','deposit'] as const).map(kind=><React.Fragment key={kind}>
+                  <DateField label={(kind==='dd'?'DD / 消费':'存款')+'奖励到账日期'} value={a.componentReceipts?.[kind]?.date||null} onChange={date=>{
+                    const parts={...a.componentReceipts};
+                    if(date)parts[kind]={date,cents:parts[kind]?.cents??(kind==='dd'?offer.ddBonusCents:offer.depositBonusCents)??0};else delete parts[kind];
+                    set('componentReceipts',parts);
+                  }}/>
+                  <NumberField label={(kind==='dd'?'DD / 消费':'存款')+'实际到账金额'} money value={a.componentReceipts?.[kind]?.cents??null} onChange={cents=>{
+                    if(!a.componentReceipts?.[kind])return;
+                    set('componentReceipts',{...a.componentReceipts,[kind]:{...a.componentReceipts[kind]!,cents:cents??0}});
+                  }}/>
+                </React.Fragment>)}
+              </> : <>
+                  <DateField label="奖励到账日期" value={a.bonusReceivedOn || null} onChange={(v) => set("bonusReceivedOn", v)}/>
+                  <NumberField label="实际到账金额" money value={a.bonusReceivedCents ?? null} onChange={(v) => set("bonusReceivedCents", v)}/>
+              </>)}
               {(complete || mode === "close") && (
                 <>
                   <DateField
@@ -321,7 +327,8 @@ export default function AccountPanel({
   const dd = a ? ddProgress(a, offer, state) : null,
     e = eligibility(offer, state),
     safe = a ? safeCloseOn(a) : null;
-  const payout = rewardPayoutSchedule(offer, a?.openedOn, dd?.last);
+  const qualified=a?qualificationProgress(a,offer,state):null;
+  const payout = rewardPayoutSchedule(offer, a?.openedOn, qualified?.last);
   const today = todayISO();
   return (
     <div className="br-detail-backdrop">
@@ -437,7 +444,7 @@ export default function AccountPanel({
                   {[
                     ["开户", a.openedOn],
                     ["DD 截止", dd?.deadline],
-                    ["奖励条件达标", dd?.last],
+                    ["奖励条件达标", qualified?.last],
                     [`${payout.dateLabel} · ${payout.anchorLabel} · ${payoutTermLabel(offer)}`, payout.date],
                     ["奖励到账", a.bonusReceivedOn],
                     ["最低持有期", safe],
@@ -489,14 +496,16 @@ export default function AccountPanel({
                           ? "尚未完成"
                           : "要求待核对"}
                     </p>
-                    {dd && (!!dd.periods.length || !!offer.feeGoalCents || !!offer.feeFreeCycles) && <ConditionProgress key={a.id} offer={offer} account={a} dd={dd} today={today} detail/>}
-                    <p className="br-hint">{offer.rewardCycleCount ? "按实际日期登记工资 DD 或借记卡消费。每期独立累计。" : "在下方编辑或删除已有记录；记录 DD 用于新增到账。"}</p>
+                    {dd && <ConditionProgress key={a.id} offer={offer} account={a} dd={dd} today={today} detail/>}
+                    {(!!offer.depositGoalCents||!!offer.transactionGoal)&&<DepositRecords key={"records-"+a.id} userId={user.id} account={a} offer={offer} onSaved={onSaved}/>}
+                    {offer.additionalConditions&&<div className="br-record-editor"><p>{offer.additionalConditions}</p><button onClick={()=>onAction('edit',a)}>记录其他条件完成日期</button></div>}
+                    <p className="br-hint">{offer.rewardCycleCount ? "按实际日期登记工资 DD、借记卡或信用卡消费。每期独立累计。" : "在下方编辑或删除已有记录；记录 DD 用于新增到账。"}</p>
                     {!dd?.all.length && <p className="br-inline-empty">暂无 DD 记录。到账后点击“记录 DD”添加。</p>}
                     {dd?.all.map((event) => (
                       <div className="br-dd-row" key={event.id}>
                         <div>
                           <strong>
-                            {event.kind==="debit" ? "借记卡消费 · " : ""}{event.date} ·{" "}
+                            {event.kind==="credit" ? "信用卡消费 · " : event.kind==="debit" ? "借记卡消费 · " : ""}{event.date} ·{" "}
                             {money(event.amountCents, offer.currency)}
                           </strong>
                           <small>
@@ -523,7 +532,7 @@ export default function AccountPanel({
                         </div>
                       </div>
                     ))}
-                    {dd?.done && !a.bonusReceivedOn && (
+                    {qualified?.done && !a.bonusReceivedOn && (
                       <p className="br-hint">
                         {payout.start && `${payout.anchorLabel}，已过 ${formatDuration(payout.start, today)} · `}{payoutTermLabel(offer)}{payout.date && ` · ${payout.dateLabel} ${payout.date}（${countdown(payout.date, today)}）`}
                       </p>
@@ -538,7 +547,7 @@ export default function AccountPanel({
                   <button onClick={() => onAction("close", a)}>
                     {a.closedOn ? "修改关户" : "关户"}
                   </button>
-                  {a.bonusReceivedOn && (
+                  {actualReceipts(a).length>0 && (
                     <button
                       className="br-danger"
                       onClick={() =>
@@ -564,7 +573,7 @@ export default function AccountPanel({
                     删除账户
                   </button>
                 </div>
-                {a.bonusReceivedOn && (
+                {actualReceipts(a).length>0 && (
                   <p className="br-hint">
                     实际到账 {money(a.bonusReceivedCents, offer.currency)} ·{" "}
                     活动记录，不同步财务
@@ -638,6 +647,7 @@ export default function AccountPanel({
             <h2>来源与备注</h2>
             {[
               ["活动来源", offer.sourceUrl],
+              ["推荐链接", offer.referralUrl],
               ["DoC 规则", offer.docUrl],
               ["重复领奖来源", offer.repeatSourceUrl],
               ["关户来源", offer.closureSourceUrl],
@@ -659,6 +669,7 @@ export default function AccountPanel({
               规则核对：{offer.docCheckedOn || "未记录"}
             </p>
             <p className="br-note">{offer.notes || "暂无备注"}</p>
+            {!!offer.images?.length && <EvidenceImages items={offer.images}/>}
             <p className="br-hint">
               关户方式：{offer.closureMethod || "未记录"}
             </p>

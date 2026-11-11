@@ -1,3 +1,4 @@
+import EvidenceImages from "./EvidenceImages";
 import SettingsSelect from "../../components/SettingsSelect";
 import React, { useState } from "react";
 import {
@@ -76,7 +77,7 @@ export default function OfferEditor({
     [busy, setBusy] = useState(false),
     [previewDate, setPreviewDate] = useState(todayISO());
   const set = <K extends keyof RewardOffer>(key: K, value: RewardOffer[K]) =>
-    setO((p) => ({ ...p, [key]: value }));
+    setO((p) => {const next={...p,[key]:value};if(next.rewardMode==='separate')next.bonusCents=(next.depositBonusCents||0)+(next.ddBonusCents||0);return next;});
   const text = (
     key: keyof RewardOffer,
     label: string,
@@ -180,8 +181,10 @@ export default function OfferEditor({
             <DateField label="活动开始日期" value={o.startsOn} onChange={v => set("startsOn",v)}/>
             <DateField label="活动结束日期" value={o.expiresOn} onChange={v => set("expiresOn",v)}/>
             {text("sourceUrl", "活动来源链接", "https://…")}
+                {text("referralUrl", "推荐链接", "自己的或他人的推荐链接 https://…")}
             {text("notes", "备注", "活动说明", true)}
           </div>
+          <EvidenceImages items={o.images} onChange={images=>set("images",images)}/>
           <p className="br-hint">保存后逐笔记录收益、存入和提取。收益按明细累计，存提不计入收益；所有记录均独立于财务。</p>
         </section> : <>
 
@@ -255,13 +258,14 @@ export default function OfferEditor({
                 {!!o.rewardCycleCount && o.cycleBasis==="statement" && number("statementDay","每月账单截止日（1–31，短月取月底）")}
                 {!!o.rewardCycleCount && o.cycleBasis==="custom" && <p className="br-hint">在账户编辑里填写各期起止日期。</p>}
                 {o.rewardCycleCount ? number("cycleDebitCents","每期借记卡消费最低金额",true) : number("ddCount", "DD 次数（留空按累计金额）")}
-                {!o.rewardCycleCount && number("deadlineDays", "DD 截止期限（开户后天数）")}
+                {number("cycleCreditCents",o.rewardCycleCount ? "每期信用卡消费最低金额" : "期限内信用卡消费最低金额",true)}
+                {!o.rewardCycleCount && number("deadlineDays", "条件截止期限（开户后天数）")}
                 {number("minHoldDays", "最低持有天数")}
                 {number("payoutDays", "奖励到账期限（天数，可留空）")}
                 <Field label="到账起算日">
                   <SettingsSelect aria-label="到账起算日" value={o.payoutAnchor || "qualification"} onChange={e => set("payoutAnchor", e.target.value as RewardOffer["payoutAnchor"])}>
-                    <option value="qualification">DD 达标日（多期活动以全部条件达标为准）</option>
-                    <option value="opening">开户日</option>
+                    <option value="qualification">条件达标日（多期活动以全部条件达标为准）</option>
+                    <option value="qualification_month_end">全部条件达标的当月月底</option><option value="opening">开户日</option>
                   </SettingsSelect>
                 </Field>
                 <Field label="发放时间">
@@ -278,7 +282,7 @@ export default function OfferEditor({
                 {number("feeGoalCents","每期免月费金额门槛（需要追踪时填写）",true)}
                 {number("feeFreeCycles","开户前几期自动免月费（可留空）")}
                 {(!!o.feeGoalCents || !!o.feeFreeCycles) && <>
-                  <Field label="免月费累计项目"><SettingsSelect aria-label="免月费累计项目" value={o.feeMetric || "dd"} onChange={e=>set("feeMetric",e.target.value as RewardOffer["feeMetric"])}><option value="dd">工资 DD</option><option value="debit">借记卡消费</option></SettingsSelect></Field>
+                  <Field label="免月费累计项目"><SettingsSelect aria-label="免月费累计项目" value={o.feeMetric || "dd"} onChange={e=>set("feeMetric",e.target.value as RewardOffer["feeMetric"])}><option value="dd">工资 DD</option><option value="debit">借记卡消费</option><option value="credit">信用卡消费</option></SettingsSelect></Field>
                   <Field label="免月费计算周期"><SettingsSelect aria-label="免月费计算周期" value={o.feeBasis || ""} onChange={e=>set("feeBasis",e.target.value as RewardOffer["feeBasis"])}><option disabled value="">待确认</option><option value="statement">账单周期</option><option value="calendar">自然月</option><option value="opening">开户日逐月</option></SettingsSelect></Field>
                   {o.feeBasis==="statement" && number("feeStatementDay","免月费结账日（未确认可留空）")}
                 </>}
@@ -290,9 +294,47 @@ export default function OfferEditor({
                 )}
               </div>
               <p className="br-hint">
-                {o.rewardCycleCount ? "按所选周期计算。工资 DD 和借记卡消费分别累计，两项均达标才完成本期。" : <>填写次数时，每笔 DD
+                {o.rewardCycleCount ? "按所选周期计算。工资 DD、借记卡和信用卡消费分别累计，已设置的门槛全部达到才完成本期。" : <>填写次数时，每笔 DD
                 都需达到金额要求；只填金额时按累计金额计算。未知条款请留空。</>}
               </p>
+            </section>
+            <section className="br-section">
+              <h2>存款金额与持有时间</h2>
+              <div className="br-form-grid">
+                {text("promoCode","优惠码")}
+                {number("transactionGoal","合格交易笔数（独立于 DD）")}
+                {number("transactionDeadlineDays","合格交易期限（开户后天数）")}
+                {text("additionalConditions","其他必须完成的条件","例如网上银行注册；请核对后在账户里记录完成日期",true)}
+              </div>
+              <p className="br-hint">有余额维持条件时填写。存款与工资 DD 分别记录，持有时间会以进度条倒计时。</p>
+              <div className="br-form-grid">
+                {number("depositGoalCents","需保持的存款金额（无要求留空）",true)}
+                {!!o.depositGoalCents&&<>
+                  {number("depositDeadlineDays","首次存足期限（开户后天数，可留空）")}
+                  <Field label="存款持有计时方式"><SettingsSelect value={o.depositHoldBasis||'funded'} onChange={e=>set('depositHoldBasis',e.target.value as RewardOffer['depositHoldBasis'])}>
+                    <option value="funded">存足后保持指定时长</option><option value="opening">保持到开户后的指定天数</option>
+                  </SettingsSelect></Field>
+                  {o.depositHoldBasis==='opening'?<>
+                    {number("depositStartOffsetDays","固定开始时间（开户后天数，留空从存足开始）")}
+                    {number("depositEndOffsetDays","持有完成时间（开户后天数）")}
+                    <p className="br-hint">0 为开户当天。例如开户后 30 天内存足，保持至开户后第 60 天，完成时间填 60。</p>
+                  </>:<>
+                    {number("depositHoldMonths","连续持有月数（与天数二选一）")}
+                    {number("depositHoldDays","连续持有天数（与月数二选一）")}
+                    <Field label="余额低于门槛后"><SettingsSelect value={o.depositRestart?'restart':'failed'} onChange={e=>set('depositRestart',e.target.value==='restart')}>
+                      <option value="failed">标记条件中断，需核对资格</option><option value="restart">按条款允许重新计时</option>
+                    </SettingsSelect></Field>
+                  </>}
+                  <Field label="存款与 DD 奖励关系"><SettingsSelect value={o.rewardMode||'combined'} onChange={e=>set('rewardMode',e.target.value as RewardOffer['rewardMode'])}>
+                    <option value="combined">全部条件满足后领一笔奖励</option><option value="separate">存款与 DD 分开领奖，可叠加</option>
+                  </SettingsSelect></Field>
+                  {o.rewardMode==='separate'&&<>
+                    {number("depositBonusCents","存款奖励金额",true)}{number("ddBonusCents","DD / 消费奖励金额",true)}
+                    <p className="br-hint">总奖励自动合计：{money(o.bonusCents,o.currency)}。每项可分别登记实际到账。</p>
+                  </>}
+
+                </>}
+              </div>
             </section>
             <section className="br-section">
               <h2>关户与重复领奖规则</h2>
@@ -478,6 +520,7 @@ export default function OfferEditor({
               <h2>参考与备注</h2>
               <div className="br-form-grid">
                 {text("sourceUrl", "活动来源链接", "https://…")}
+                {text("referralUrl", "推荐链接", "自己的或他人的推荐链接 https://…")}
                 {text("docUrl", "Doctor of Credit 链接", "https://…")}
                 <DateField
                   label="规则核对日期"
@@ -485,9 +528,10 @@ export default function OfferEditor({
                   onChange={(v) => set("docCheckedOn", v)}
                 />
                 {text("repeatSourceUrl", "重复领奖来源链接", "https://…")}
-                {text("closureSourceUrl", "关户来源链接", "https://…")}
+                {o.closureSourceUrl && text("closureSourceUrl", "已有的关户来源链接", "https://…")}
                 {text("notes", "备注", "你的记录与提醒", true)}
               </div>
+              <EvidenceImages items={o.images} onChange={images=>set("images",images)}/>
             </section>
           </div>
           <aside className="br-preview">
@@ -530,6 +574,7 @@ export default function OfferEditor({
               <Progress value={0} />
               <p className="br-hint">
                 {o.rewardCycleCount ? `连续 ${o.rewardCycleCount} 期 · 每期工资 DD ${money(o.ddAmountCents, o.currency)} + 借记卡消费 ${money(o.cycleDebitCents ?? 0,o.currency)}` : `DD ${o.ddCount || "—"} 次 · ${money(o.ddAmountCents, o.currency)}`}
+                {!!o.cycleCreditCents && <> · 信用卡消费 {money(o.cycleCreditCents,o.currency)}</>}
               </p>
             </section>
             <section className="br-section">

@@ -1,7 +1,10 @@
-const {app, BrowserWindow, dialog, ipcMain, session, shell, screen} = require('electron');
+const {app, BrowserWindow, dialog, ipcMain, session, shell, screen, nativeImage, safeStorage} = require('electron');
 const fs = require('node:fs');
 const {windowScale} = require('./window-scale.cjs');
 const path = require('node:path');
+const {createWebReader} = require('./web-reader.cjs');
+const {createAIService} = require('./ai-service.cjs');
+const {createImageStore} = require('./image-store.cjs');
 const {createHash, randomUUID} = require('node:crypto');
 const {pathToFileURL} = require('node:url');
 
@@ -41,6 +44,12 @@ if (!app.requestSingleInstanceLock()) {
     if (win && !app.commandLine.hasSwitch('headless')) { win.restore(); win.show(); win.focus(); }
   });
   app.whenReady().then(() => {
+    const ai=createAIService({directory:app.getPath('userData'),safeStorage,atomicWrite,readOfferPage:createWebReader({BrowserWindow,session})});
+    handle('ai:read',()=>ai.view());
+    handle('ai:save',value=>ai.save(value));
+    handle('ai:remove',id=>ai.remove(id));
+    handle('ai:run',value=>ai.run(value));
+    handle('ai:cancel',()=>ai.cancel());
     const settings = path.join(app.getPath('userData'), 'layout.json');
     handle('layout:read', () => {
       try { return JSON.parse(fs.readFileSync(settings,'utf8')); }
@@ -50,6 +59,25 @@ if (!app.requestSingleInstanceLock()) {
       const bytes = Buffer.from(JSON.stringify(value),'utf8');
       if (value?.version !== 1 || bytes.length > 16384) throw new Error('布局设置无效。');
       atomicWrite(settings, bytes);
+    });
+    const images = createImageStore(path.join(app.getPath('userData'),'images'),nativeImage);
+    handle('images:select', async () => {
+      const result = await dialog.showOpenDialog(win, {title:'添加活动截图', properties:['openFile','multiSelections'],
+        filters:[{name:'图片', extensions:['png','jpg','jpeg','webp','gif','bmp']}]});
+      return result.canceled ? [] : images.prepare(result.filePaths);
+    });
+    handle('images:discard', ids => {
+      if (!Array.isArray(ids) || ids.some(id=>typeof id !== 'string')) throw new Error('图片列表无效。');
+      images.discard(ids);
+    });
+    handle('images:preview', (id, full) => images.preview(id, full === true));
+    handle('images:export', async (id, name) => {
+      const bytes = images.read(id);
+      const clean = typeof name === 'string' ? path.basename(name).replace(/[<>:"/\\|?*\x00-\x1f]/g,'_').slice(0,180) : '截图';
+      const result = await dialog.showSaveDialog(win, {defaultPath:clean || '截图.'+id.split('.')[1],
+        filters:[{name:'原图', extensions:[id.split('.')[1]]}]});
+      if (!result.canceled) await fs.promises.writeFile(result.filePath,bytes);
+      return {canceled:result.canceled};
     });
     handle('records:read', () => {
       const bytes = readBytes();
@@ -65,7 +93,10 @@ if (!app.requestSingleInstanceLock()) {
       if (state?.version !== 1 || state.userId !== 'local' || !Array.isArray(state.offers))
         throw new Error('记录格式无效。');
       const bytes = Buffer.from(JSON.stringify(state), 'utf8');
+      const oldState=previous === null ? null : JSON.parse(previous.toString('utf8'));
+      images.commit(state, oldState);
       atomicWrite(file(), bytes);
+      images.prune(state, oldState);
       return digest(bytes);
     });
     handle('records:csv', async (text, name) => {
@@ -93,6 +124,9 @@ if (!app.requestSingleInstanceLock()) {
     handle('layout:scale', enabled => {
       scaleWithWindow = enabled !== false;
       applyScale();
+    });
+    handle('layout:name', name => {
+      win.setTitle(typeof name === 'string' ? name.replace(/[\x00-\x1f]/g,'').trim().slice(0,40) || '金羊毛' : '金羊毛');
     });
     win.removeMenu();
     win.webContents.on('will-navigate', event => event.preventDefault());

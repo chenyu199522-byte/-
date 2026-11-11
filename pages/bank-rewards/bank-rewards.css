@@ -1263,3 +1263,36 @@
 .br-condition-meter[data-met=true] progress::-webkit-progress-value { background:#35d3a3; }
 .br-condition-meter small { color:var(--br-muted); font-size:0.625rem; margin:0; }
 .br-fee-dates button { padding:2px 9px; }
+
+/* Attached conditions share space with readable rules, wrapping as a unit. */
+.br-condition-layout {display:flex;flex-wrap:wrap;gap:20px;align-items:flex-start;width:100%;min-width:0;}
+.br-condition-layout > .br-condition-board {flex:1 1 540px;}
+.br-condition-reminders {flex:1 1 290px;min-width:0;padding:12px 18px;border-left:1px solid #94a3b830;color:var(--br-muted);font-size:.92rem;line-height:1.6;overflow-wrap:anywhere;}
+.br-condition-reminders h3 {margin:0 0 10px;color:#c4d4df;font-size:1rem;font-weight:600;}
+.br-reminder-line {display:flex;gap:14px;margin:5px 0;align-items:baseline;}
+.br-reminder-line > span {flex:0 0 5em;}
+.br-reminder-line strong {font-weight:500;color:var(--br-text);}
+.br-condition-reminders details {margin-top:10px;}
+.br-condition-reminders summary {cursor:pointer;color:#ada8f5;}
+.br-condition-reminders p {white-space:pre-wrap;margin:8px 0;}
+.br-extra-conditions {margin-top:10px;}
+.br-extra-conditions > span {color:#f1c879;font-size:.85rem;}
+.br-balance-caption {display:block;font-size:.8rem;color:var(--br-muted);margin-top:8px;white-space:normal;}
+.br-condition-reward {font-size:.9rem;line-height:1.5;}
+.br-condition-period[data-status=broken] {border-color:#fb7185;color:#fda4af;}
+.br-condition-row .br-condition-layout {padding:8px 0 12px;}
+.br-condition-row .br-condition-layout > .br-condition-board {flex:2 1 600px;width:auto;max-width:100%;}
+.br-condition-row .br-condition-layout > .br-condition-reminders {margin-left:0;padding-top:8px;flex:1 1 300px;}
+.br-condition-row .br-condition-board .br-condition-period {max-width:100%;flex:0 1 320px;}
+.br-condition-row .br-condition-board {max-width:100%;}
+.br-record-editor {margin-top:20px;border-top:1px solid var(--br-border);padding-top:16px;}
+.br-record-editor .br-record-list {display:grid;gap:8px;margin:12px 0;}
+.br-record-item {display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 0;border-bottom:1px solid var(--br-border);}
+.br-record-item small {display:block;color:var(--br-muted);}
+@media(max-width:900px) {
+ .br-condition-layout {gap:10px;}
+ .br-condition-layout > .br-condition-reminders {flex-basis:100%;border-left:0;border-top:1px solid #94a3b830;}
+ .br-condition-row .br-condition-layout > .br-condition-board {flex-basis:100%;}
+}
+
+.br-condition-board:empty {display:none;}

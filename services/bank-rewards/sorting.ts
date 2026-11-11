@@ -1,7 +1,7 @@
 import type { RewardAccount, RewardOffer } from './types';
 
 export interface RewardSortRow {
-  o: Pick<RewardOffer, 'bonusCents' | 'ddAmountCents' | 'ddCount' | 'expiresOn' | 'updatedAt' | 'rewardCycleCount' | 'feeGoalCents' | 'feeFreeCycles'>;
+  o: Pick<RewardOffer, 'bonusCents' | 'ddAmountCents' | 'ddCount' | 'expiresOn' | 'updatedAt' | 'rewardCycleCount' | 'feeGoalCents' | 'feeFreeCycles' | 'cycleCreditCents' | 'depositGoalCents' | 'transactionGoal'>;
   a?: Pick<RewardAccount, 'openedOn' | 'historyOnly' | 'bonusReceivedOn' | 'closedOn'>;
   dd: { deadline: string | null; done: boolean } | null;
   safe: string | null;
@@ -18,7 +18,7 @@ const pendingDeadline = (row: RewardSortRow) =>
 function activitySize(row: RewardSortRow) {
   if (!row.a || row.a.historyOnly) return 0;
   if (row.o.rewardCycleCount) return row.o.rewardCycleCount + 1;
-  return row.o.feeGoalCents || row.o.feeFreeCycles ? 1 : 0;
+  return row.o.feeGoalCents || row.o.feeFreeCycles || row.o.cycleCreditCents || row.o.depositGoalCents || row.o.transactionGoal ? 1 : 0;
 }
 
 export function compareRewardRows(a: RewardSortRow, b: RewardSortRow, sort: string): number {

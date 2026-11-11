@@ -18,7 +18,29 @@ export interface ActivityEntry {
   id: string; userId: string; offerId: string; kind: EntryKind; date: ISODate;
   amountCents: number; title: string; notes: string; createdAt: string; updatedAt: string;
 }
+export interface EvidenceImage {
+  id: string; name: string; mime: string; size: number; addedAt: string;
+}
+export interface DepositBalance {id:string;date:ISODate;amountCents:number;note:string}
+export interface ComponentReceipt {date:ISODate;cents:number}
 export interface RewardOffer {
+  promoCode?:string;
+  transactionGoal?:number|null;
+  transactionDeadlineDays?:number|null;
+  depositGoalCents?:number|null;
+  depositDeadlineDays?:number|null;
+  depositHoldBasis?:'funded'|'opening';
+  depositHoldDays?:number|null;
+  depositHoldMonths?:number|null;
+  depositStartOffsetDays?:number|null;
+  depositEndOffsetDays?:number|null;
+  depositRestart?:boolean;
+  rewardMode?:'combined'|'separate';
+  depositBonusCents?:number|null;
+  ddBonusCents?:number|null;
+  additionalConditions?:string;
+  images?: EvidenceImage[];
+  referralUrl?: string;
   /** Missing on legacy offers means one_time. */
   activityType?: ActivityType;
   activityStatus?: ActivityStatus;
@@ -36,20 +58,21 @@ export interface RewardOffer {
   statementDay?: number | null;
   rewardCycleCount?: number | null;
   cycleDebitCents?: number | null;
+  cycleCreditCents?: number | null;
   deadlineDays: number | null;
   minHoldDays: number | null;
   monthlyFee: string;
   feeNote: string;
   feeFreeCycles?: number | null;
   feeGoalCents?: number | null;
-  feeMetric?: 'dd' | 'debit';
+  feeMetric?: 'dd' | 'debit' | 'credit';
   feeBasis?: 'calendar' | 'opening' | 'statement';
   feeStatementDay?: number | null;
   earlyClosePenalty: string;
   startsOn: ISODate | null;
   expiresOn: ISODate | null;
   payoutDays: number | null;
-  payoutAnchor?: "qualification" | "opening";
+  payoutAnchor?: "qualification" | "opening" | "qualification_month_end";
   payoutTiming?: "within" | "after";
   payoutDayUnit?: "calendar" | "business";
   repeatable: boolean | null;
@@ -70,6 +93,10 @@ export interface RewardOffer {
   updatedAt: string;
 }
 export interface RewardAccount {
+  qualifyingTransactions?:{id:string;date:ISODate;note:string}[];
+  depositBalances?:DepositBalance[];
+  componentReceipts?:Partial<Record<'dd'|'deposit',ComponentReceipt>>;
+  additionalConditionsMetOn?:ISODate|null;
   id: string;
   userId: string;
   offerId: string;
@@ -94,7 +121,7 @@ export interface RewardAccount {
   updatedAt: string;
 }
 export interface RewardDdEvent {
-  kind?: "dd" | "debit";
+  kind?: "dd" | "debit" | "credit";
   id: string;
   userId: string;
   accountId: string;

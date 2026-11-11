@@ -1,3 +1,4 @@
+import EvidenceImages from "./EvidenceImages";
 import SettingsSelect from "../../components/SettingsSelect";
 import React, { useEffect, useRef, useState } from "react";
 import type { User } from "../../types";
@@ -226,6 +227,8 @@ export default function LongTermActivities({
             <button onClick={() => onEdit(offer)}>编辑活动</button>
             <button className="br-danger" onClick={() => onDelete(offer)}>删除活动</button>
           </div>
+          {offer.referralUrl && <a className="br-source" href={offer.referralUrl} target="_blank" rel="noreferrer">推荐链接</a>}
+          {!!offer.images?.length && <EvidenceImages items={offer.images}/>}
           {!rows.length && <p className="br-inline-empty">尚无记录</p>}
           {rows.map((e) => (
             <article className="br-long-entry" key={e.id}>

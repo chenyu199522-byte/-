@@ -17,13 +17,13 @@ export type CardName = typeof cards[number];
 export interface ColumnSetting {id: ColumnId; visible: boolean; width: number}
 export interface CardSetting {id: CardName; visible: boolean}
 export interface Layout {
-  version: 1; font: number; margin: number; gap: number; rowHeight: number; cardWidth: number;
+  appName: string; version: 1; font: number; margin: number; gap: number; rowHeight: number; cardWidth: number;
   scaleWithWindow: boolean; adaptive: boolean; columns: ColumnSetting[]; cards: CardSetting[];
 }
 export const required = (id: ColumnId) => id === 'bank' || id === 'actions';
 export const minimumWidth = (id: ColumnId) => id === 'actions' || id === 'progress' ? 140 : 100;
 export function defaultLayout(): Layout {
-  return {version:1, font:100, margin:24, gap:14, rowHeight:100, cardWidth:165, scaleWithWindow:true, adaptive:true,
+  return {version:1, appName:"金羊毛", font:100, margin:24, gap:14, rowHeight:100, cardWidth:165, scaleWithWindow:true, adaptive:true,
     columns:columns.map(({id,width})=>({id,width,visible:true})), cards:cards.map(id=>({id,visible:true}))};
 }
 function bounded(value: unknown, fallback: number, low: number, high: number) {
@@ -47,7 +47,7 @@ export function readLayout(raw: unknown): Layout {
   const d = defaultLayout();
   if (!raw || typeof raw !== 'object' || !('version' in raw) || raw.version !== 1) return d;
   const v = raw as Partial<Layout>;
-  return {...d, font:bounded(v.font,d.font,85,150), margin:bounded(v.margin,d.margin,8,48),
+  return {...d, appName:typeof v.appName === "string" ? v.appName.replace(/[\x00-\x1f]/g,"").trim().slice(0,40) || d.appName : d.appName, font:bounded(v.font,d.font,85,150), margin:bounded(v.margin,d.margin,8,48),
     gap:bounded(v.gap,d.gap,6,28), rowHeight:bounded(v.rowHeight,d.rowHeight,60,160),
     cardWidth:bounded(v.cardWidth,d.cardWidth,120,300), scaleWithWindow:v.scaleWithWindow !== false, adaptive:v.adaptive !== false,
     columns:ordered(d.columns,v.columns), cards:ordered(d.cards,v.cards)};

@@ -40,6 +40,9 @@ export const rewardRepository = {
         throw new Error("已有明细或银行规则的活动不能切换类型，请新建活动以保留历史。");
       if (existing && existing.currency !== input.currency && s.entries?.some(e => e.offerId === existing.id))
         throw new Error("已有明细的长期活动不能更换币种，请新建对应币种的活动。");
+      if(existing && (existing.rewardMode||'combined')!==(input.rewardMode||'combined') &&
+        s.accounts.some(a=>a.offerId===existing.id && (a.bonusReceivedOn || Object.keys(a.componentReceipts||{}).length)))
+        throw new Error('已有到账记录，修改领奖方式前请先核对并撤销相应到账记录。');
       const previousHold = existing?.minHoldDays;
       const offer = {
         ...input,
@@ -49,6 +52,7 @@ export const rewardRepository = {
         createdAt: existing?.createdAt || now(),
         updatedAt: now(),
       };
+      if(offer.rewardMode==='separate')offer.bonusCents=(offer.ddBonusCents||0)+(offer.depositBonusCents||0);
       if (offer.applicationStatus !== "denied") {
         offer.deniedOn = null;
         if (
@@ -128,10 +132,39 @@ export const rewardRepository = {
       a.userId = userId;
       a.offerId = offerId;
       a.updatedAt = now();
-      if (!a.bonusReceivedOn) a.bonusReceivedCents = null;
+      if(o.rewardMode==='separate' && a.componentReceipts!==undefined) {
+        const parts=Object.values(a.componentReceipts);
+        a.bonusReceivedCents=parts.length?parts.reduce((sum,r)=>sum+(r?.cents||0),0):null;
+        a.bonusReceivedOn=a.componentReceipts.dd && a.componentReceipts.deposit?parts.map(r=>r!.date).sort().at(-1)!:null;
+      } else if (!a.bonusReceivedOn) a.bonusReceivedCents = null;
       s.accounts = [...s.accounts.filter((x) => x.id !== a.id), a];
       o.updatedAt = now();
       if (!a.historyOnly) o.applicationStatus = "opened";
+    });
+  },
+  saveDepositBalance(userId:string,accountId:string,row:import('./types').DepositBalance) {
+    return this.mutate(userId,s=>{
+      const a=s.accounts.find(a=>a.id===accountId);if(!a)throw new Error('账户不存在。');
+      a.depositBalances=[...(a.depositBalances||[]).filter(r=>r.id!==row.id),row];
+      a.updatedAt=now();
+    });
+  },
+  deleteDepositBalance(userId:string,accountId:string,rowId:string) {
+    return this.mutate(userId,s=>{
+      const a=s.accounts.find(a=>a.id===accountId);if(!a)throw new Error('账户不存在。');
+      a.depositBalances=(a.depositBalances||[]).filter(r=>r.id!==rowId);a.updatedAt=now();
+    });
+  },
+  saveQualifyingTransaction(userId:string,accountId:string,row:{id:string;date:string;note:string}) {
+    return this.mutate(userId,s=>{
+      const a=s.accounts.find(a=>a.id===accountId);if(!a)throw new Error('账户不存在。');
+      a.qualifyingTransactions=[...(a.qualifyingTransactions||[]).filter(r=>r.id!==row.id),row];a.updatedAt=now();
+    });
+  },
+  deleteQualifyingTransaction(userId:string,accountId:string,rowId:string) {
+    return this.mutate(userId,s=>{
+      const a=s.accounts.find(a=>a.id===accountId);if(!a)throw new Error('账户不存在。');
+      a.qualifyingTransactions=(a.qualifyingTransactions||[]).filter(r=>r.id!==rowId);a.updatedAt=now();
     });
   },
   saveDd(userId: string, input: RewardDdEvent) {
@@ -154,7 +187,7 @@ export const rewardRepository = {
     });
   },
   revokeReceipt(userId: string, account: RewardAccount) {
-    return this.saveAccount(userId, account.offerId, { id: account.id, bonusReceivedOn: null, bonusReceivedCents: null });
+    return this.saveAccount(userId, account.offerId, { id: account.id, bonusReceivedOn: null, bonusReceivedCents: null, componentReceipts:undefined });
   },
   revokeClosure(userId: string, account: RewardAccount) {
     return this.saveAccount(userId, account.offerId, { id: account.id, closedOn: null });
@@ -219,7 +252,7 @@ export function toCsv(state: RewardState): string {
       "最低持有天数",
       "历史账户",
       "活动来源",
-      "备注", "活动类型", "记录类型", "记录金额", "记录日期", "记录名称",
+      "备注", "活动类型", "记录类型", "记录金额", "记录日期", "记录名称", "推荐链接", "DD奖励到账金额", "DD奖励到账日期", "存款奖励到账金额", "存款奖励到账日期", "存款要求金额", "优惠码",
     ],
   ];
   for (const o of state.offers) {
@@ -227,7 +260,7 @@ export function toCsv(state: RewardState): string {
       const entries = (state.entries || []).filter(e => e.offerId === o.id);
       for (const e of entries.length ? entries : [undefined]) rows.push([
         o.bankName, o.productName, o.currency, "", "", "", "", "", "", "", "", o.sourceUrl, e?.notes || o.notes,
-        "长期活动", e ? {earning:"收益",deposit:"存入",withdrawal:"提取"}[e.kind] : "", e ? e.amountCents / 100 : "", e?.date, e?.title,
+        "长期活动", e ? {earning:"收益",deposit:"存入",withdrawal:"提取"}[e.kind] : "", e ? e.amountCents / 100 : "", e?.date, e?.title, o.referralUrl,
       ]);
       continue;
     }
@@ -248,7 +281,10 @@ export function toCsv(state: RewardState): string {
         a?.minHoldDays,
         a?.historyOnly ? "是" : "否",
         o.sourceUrl,
-        a?.notes || o.notes, "一次性活动", "", "", "", "",
+        a?.notes || o.notes, "一次性活动", "", "", "", "", o.referralUrl,
+        a?.componentReceipts?.dd ? a.componentReceipts.dd.cents/100 : "",a?.componentReceipts?.dd?.date,
+        a?.componentReceipts?.deposit ? a.componentReceipts.deposit.cents/100 : "",a?.componentReceipts?.deposit?.date,
+        o.depositGoalCents!=null?o.depositGoalCents/100:"",o.promoCode,
       ]);
   }
   return "\uFEFF" + rows.map((r) => r.map(cell).join(",")).join("\r\n");

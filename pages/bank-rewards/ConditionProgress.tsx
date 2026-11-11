@@ -1,6 +1,6 @@
 import React, {useState} from 'react';
 import type {RewardOffer, RewardAccount} from '../../services/bank-rewards/types';
-import {ddProgress,feeProgress,money} from '../../services/bank-rewards/logic';
+import {ddProgress,feeProgress,money,depositProgress,transactionProgress,addDays,countdown} from '../../services/bank-rewards/logic';
 
 function Meter({label,amount,goal,currency}:{label:string;amount:number;goal:number;currency:string}) {
   const remaining=Math.max(0,goal-amount);
@@ -24,7 +24,7 @@ export function SplitProgress({offer:o,account,dd,today}:SummaryProps) {
   const fee=feeProgress(account,o,dd.all,today);
   const period=dd.periods.find(p=>p.start && p.start<=today && today<=p.end);
   const moneyHere=(amount:number)=>money(amount,o.currency);
-  const depositRatio=dd.periods.length ? (period && o.ddAmountCents ? period.deposits/o.ddAmountCents : null) : dd.known ? dd.ratio : null;
+  const depositRatio=dd.periods.length ? (period && o.ddAmountCents ? period.deposits/o.ddAmountCents : null) : dd.known && o.ddAmountCents ? Math.min(1,dd.totalCents/o.ddAmountCents) : null;
   const depositCaption=dd.periods.length ? (period ? moneyHere(period.deposits)+' / '+moneyHere(o.ddAmountCents ?? 0) : '当前无考核期') :
     o.ddCount ? `${dd.count}/${o.ddCount} 笔` : dd.known ? moneyHere(dd.totalCents)+' / '+moneyHere(o.ddAmountCents ?? 0) : '要求待核对';
   let feeRatio:number|null=null;
@@ -33,7 +33,7 @@ export function SplitProgress({offer:o,account,dd,today}:SummaryProps) {
   else if (fee && o.feeGoalCents) {feeRatio=fee.amount/o.feeGoalCents; feeCaption=feeRatio>=1?'✓ 本期已达标':moneyHere(fee.amount)+' / '+moneyHere(o.feeGoalCents);}
   else if (fee) feeCaption='免费期已结束';
   const feeTitle=[o.feeNote, fee && `${fee.start} 至 ${fee.end}`,o.feeGoalCents && `门槛 ${moneyHere(o.feeGoalCents)}`,feeCaption].filter(Boolean).join(' · ');
-  return <div className="br-split-progress"><SummaryMeter label="存款进度" ratio={depositRatio} caption={depositCaption} title={`${depositCaption} · DD 门槛 ${moneyHere(o.ddAmountCents??0)}`}/>
+  return <div className="br-split-progress"><SummaryMeter label="DD 进度" ratio={depositRatio} caption={depositCaption} title={`${depositCaption} · DD 门槛 ${moneyHere(o.ddAmountCents??0)}`}/>
     <SummaryMeter label="免月费进度" ratio={feeRatio} caption={feeCaption} title={feeTitle}/></div>;
 }
 
@@ -42,19 +42,54 @@ export default function ConditionProgress({offer,account,dd,today,detail=false}:
 }) {
   const [offset,setOffset]=useState(0);
   const fee=detail ? feeProgress(account,offer,dd.all,today,offset) : null;
-  return <div className="br-condition-board">
+  const deposit=depositProgress(account,offer,today),transactions=transactionProgress(account,offer,today);
+  const reminders=[
+    offer.promoCode && ['优惠码',offer.promoCode],
+    deposit?.fundingDeadline && ['存入截止',deposit.fundingDeadline+' · '+countdown(deposit.fundingDeadline,today)],
+    transactions.deadline && ['交易截止',transactions.deadline+' · '+countdown(transactions.deadline,today)],
+    offer.expiresOn && ['活动截止',offer.expiresOn],
+    offer.feeNote && ['免月费',offer.feeNote],
+    offer.earlyClosePenalty && ['提前关户',offer.earlyClosePenalty],
+  ].filter(Boolean) as string[][];
+  return <div className="br-condition-layout"><div className="br-condition-board">
     {dd.periods.map((p,i)=><section key={i} aria-label={`第 ${i+1} 期条件`} className="br-condition-period" data-status={p.metOn?'met':p.start && p.start<=today && today<=p.end?'current':'other'}>
       <header><b>第 {i+1} 期</b><span>{p.metOn?'✓ 本期已达标':!p.start?'待填日期':today<p.start?'未开始':today>p.end?'本期未达标':'本期进行中'}</span></header>
       <div className="br-condition-date">{detail ? `第 ${i+1} 期 · ` : ''}{p.start ? p.start+' 至 '+p.end : '待填日期（编辑账户）'}</div>
       {!!offer.ddAmountCents && <Meter label="工资 DD" amount={p.deposits} goal={offer.ddAmountCents} currency={offer.currency}/>}
       {!!offer.cycleDebitCents && <Meter label="借记卡消费" amount={p.spending} goal={offer.cycleDebitCents} currency={offer.currency}/>}
+      {!!offer.cycleCreditCents && <Meter label="信用卡消费" amount={p.creditSpending} goal={offer.cycleCreditCents} currency={offer.currency}/>}
     </section>)}
+    {!dd.periods.length && !!offer.cycleCreditCents && <section className="br-condition-period"><header><b>信用卡消费条件</b></header><Meter label="信用卡消费" amount={dd.all.filter(e=>e.kind==="credit" && e.date>=account.openedOn && e.date<=today && (!dd.deadline || e.date<=dd.deadline)).reduce((sum,e)=>sum+e.amountCents,0)} goal={offer.cycleCreditCents} currency={offer.currency}/></section>}
+    {deposit && <section className="br-condition-period br-deposit-condition" data-status={deposit.done?'met':deposit.broken?'broken':'current'}>
+      <header><b>存款与持有时间</b><span>{deposit.broken?'余额 / 期限待核对':deposit.done?'✓ 持有期已完成':deposit.start?'持有中':'等待存入'}</span></header>
+      <Meter label="已存金额" amount={deposit.amount} goal={deposit.goal} currency={offer.currency}/>
+      <div className="br-condition-meter">
+        <div><span>持有倒计时</span><strong>{deposit.broken?'条件中断':deposit.known?deposit.done?'已完成':`还剩 ${deposit.remaining} 天`:'尚未起算'}</strong></div>
+        <progress aria-label="持有倒计时" max={1} value={deposit.broken?0:deposit.ratio}/>
+      </div>
+      <div className="br-condition-date">{deposit.start&&deposit.end?`${deposit.start} 至 ${deposit.end}`:offer.depositHoldBasis==='opening'?(offer.depositEndOffsetDays!=null?`保持至 ${addDays(account.openedOn,offer.depositEndOffsetDays)}`:'持有完成时间待填写'):`余额达标后保持 ${offer.depositHoldMonths?`${offer.depositHoldMonths} 个月`:`${offer.depositHoldDays??'—'} 天`}`}</div>
+      <small className="br-balance-caption">按余额记录推算 · {account.depositBalances?.length?'最新记录 '+[...account.depositBalances].map(r=>r.date).sort().at(-1):'尚未记录余额'}</small>
+      {offer.rewardMode==='separate'&&<p className="br-condition-reward">存款奖励 {money(offer.depositBonusCents??null,offer.currency)} · {account.componentReceipts?.deposit?'已到账 '+account.componentReceipts.deposit.date:'待到账'}</p>}
+    </section>}
+    {!!transactions.goal && <section className="br-condition-period" data-status={transactions.done?'met':transactions.late?'broken':'other'}>
+      <header><b>合格交易</b><span>{transactions.done?'✓ 已完成':transactions.late?'已过截止日':'待完成'}</span></header>
+      <div className="br-condition-meter"><div><span>已确认交易</span><strong>{transactions.count} / {transactions.goal} 笔</strong></div><progress aria-label="合格交易" max={transactions.goal} value={Math.min(transactions.count,transactions.goal)}/></div>
+      <div className="br-condition-date">{transactions.deadline?'截止 '+transactions.deadline:'按活动条款确认每笔是否合格'}</div>
+    </section>}
     {detail && (!!offer.feeGoalCents || !!offer.feeFreeCycles) && <section className="br-condition-period br-waiver" data-status={fee && (fee.free || !!offer.feeGoalCents && fee.amount>=offer.feeGoalCents)?'met':'other'} aria-label="免月费条件">
       <header><b>免月费{offer.monthlyFee ? ' · '+offer.monthlyFee : ''}</b><span>{fee?.free?'✓ 开户免月费':fee && !!offer.feeGoalCents && fee.amount>=offer.feeGoalCents?'✓ 条件已满足':'每期单独累计'}</span></header>
       {fee ? <><div className="br-fee-dates"><button type="button" aria-label="上一个免月费周期" disabled={!fee.index} onClick={()=>setOffset(fee.index-fee.current-1)}>‹</button><span>{fee.start} 至 {fee.end}</span><button type="button" aria-label="下一个免月费周期" disabled={fee.index>=fee.current} onClick={()=>setOffset(fee.index-fee.current+1)}>›</button></div>
         {fee.free && <p>第 {fee.index+1} / {offer.feeFreeCycles} 个免费周期 · 本期无需达到金额门槛</p>}
-        {!fee.free && !!offer.feeGoalCents && <Meter label={offer.feeMetric==='debit'?'免月费借记卡消费':'免月费工资 DD'} amount={fee.amount} goal={offer.feeGoalCents} currency={offer.currency}/>}{!fee.free && !offer.feeGoalCents && <p>免费期已结束，后续豁免条件待填写。</p>}</>
-        : <p>{!!offer.feeFreeCycles && `开户前 ${offer.feeFreeCycles} 期免月费。`}{!!offer.feeGoalCents && <>每期{offer.feeMetric==='debit'?'借记卡消费':'工资 DD'} ≥ {money(offer.feeGoalCents,offer.currency)}。</>}{offer.feeBasis==='statement'?'待填写账单结账日。':'待确认计算周期。'}</p>}
+        {!fee.free && !!offer.feeGoalCents && <Meter label={offer.feeMetric==='credit'?'免月费信用卡消费':offer.feeMetric==='debit'?'免月费借记卡消费':'免月费工资 DD'} amount={fee.amount} goal={offer.feeGoalCents} currency={offer.currency}/>}{!fee.free && !offer.feeGoalCents && <p>免费期已结束，后续豁免条件待填写。</p>}</>
+        : <p>{!!offer.feeFreeCycles && `开户前 ${offer.feeFreeCycles} 期免月费。`}{!!offer.feeGoalCents && <>每期{offer.feeMetric==='credit'?'信用卡消费':offer.feeMetric==='debit'?'借记卡消费':'工资 DD'} ≥ {money(offer.feeGoalCents,offer.currency)}。</>}{offer.feeBasis==='statement'?'待填写账单结账日。':'待确认计算周期。'}</p>}
     </section>}
+  </div>
+    {(reminders.length>0||offer.requirements||offer.additionalConditions) && <aside className="br-condition-reminders" aria-label="规则与提醒">
+      <h3>规则与提醒</h3>
+      {reminders.map(([label,value])=><div className="br-reminder-line" key={label}><span>{label}</span><strong>{value}</strong></div>)}
+      {offer.additionalConditions && <div className="br-extra-conditions"><span>{account.additionalConditionsMetOn?'✓ 已核对 '+account.additionalConditionsMetOn:'待核对'}</span><p>{offer.additionalConditions}</p></div>}
+      {offer.requirements&&<details><summary>展开活动细则</summary><p>{offer.requirements}</p></details>}
+      {offer.rewardMode==='separate'&&<p className="br-condition-reward">DD / 消费奖励 {money(offer.ddBonusCents??null,offer.currency)} · {account.componentReceipts?.dd?'已到账 '+account.componentReceipts.dd.date:'待到账'}</p>}
+    </aside>}
   </div>;
 }

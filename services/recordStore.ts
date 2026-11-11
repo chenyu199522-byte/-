@@ -5,6 +5,16 @@ declare global {
   interface Window {
     katanos?: {exportBankRewardsCsv(text: string, name: string): Promise<{canceled: boolean}>};
     goldenFleece: {
+      aiRead(): Promise<import('./ai').AIConfig>;
+      aiSave(value: unknown): Promise<import('./ai').AIConfig>;
+      aiRemove(id: string): Promise<import('./ai').AIConfig>;
+      aiRun(value: import('./ai').AIRequest): Promise<import('./ai').AIResult>;
+      aiCancel(): Promise<void>;
+      selectImages(): Promise<import('./bank-rewards/types').EvidenceImage[]>;
+      discardImages(ids: string[]): Promise<void>;
+      imagePreview(id: string, full: boolean): Promise<string>;
+      imageExport(id: string, name: string): Promise<{canceled:boolean}>;
+      previewName(name: string): Promise<void>;
       previewScale(enabled: boolean): Promise<void>;
       readLayout(): Promise<unknown>;
       saveLayout(layout: import('./layout').Layout): Promise<void>;
