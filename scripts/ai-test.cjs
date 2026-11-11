@@ -10,6 +10,7 @@ async function run(){
  const p=await app.firstWindow();p.setDefaultTimeout(15000);
  await app.evaluate(({BrowserWindow})=>BrowserWindow.getAllWindows()[0].webContents.setBackgroundThrottling(false));
  await button(p,'DD条件检测').click();await button(p,'AI 设置').click();
+ await button(p,'其他服务 / 高级设置').click();
  await p.getByLabel('服务名称',{exact:true}).fill('Synthetic AI');
  await p.getByLabel('模型名称',{exact:true}).fill('synthetic-model');
  await p.getByLabel('API 密钥',{exact:true}).fill('test-secret-not-real');
@@ -17,7 +18,7 @@ async function run(){
  await expect(p.getByText('已保存到本机。',{exact:true})).toBeVisible();
  const settings=fs.readFileSync(path.join(root,'ai-settings.json'),'utf8');
  assert.ok(!settings.includes('test-secret-not-real'));
- await button(p,'关闭对话框').click();await button(p,'一次性活动').click();
+ await button(p,'关闭对话框').last().click();await button(p,'关闭对话框').click();await button(p,'一次性活动').click();
  await app.evaluate(({ipcMain})=>{
    ipcMain.removeHandler('ai:run');
    ipcMain.handle('ai:run',()=>({kind:'offer',fields:{},verdict:'unknown',summary:'Synthetic offer',uncertainties:[],
@@ -47,8 +48,8 @@ async function run(){
  const state=JSON.parse(fs.readFileSync(path.join(root,'records.json'),'utf8'));
  assert.deepEqual(state.ddEvents.map(e=>e.kind),['dd','debit','credit']);
  await button(p,'DD条件检测').click();
- await p.getByLabel('从已有 DD 带入',{exact:true}).selectOption(state.ddEvents[0].id);
- await expect(p.getByLabel('DD 来源 / 备注',{exact:true})).toHaveValue('Synthetic payroll');
+ await p.getByLabel('选择活动',{exact:true}).selectOption(state.offers[0].id);
+ await expect(p.getByText('共 1 笔 DD，0 笔待补来源备注。',{exact:false})).toBeVisible();
  assert.equal(await app.evaluate(({BrowserWindow})=>BrowserWindow.getAllWindows().some(w=>w.isVisible())),false);
  const cdp=await p.context().newCDPSession(p);
  for(const [width,height] of [[1280,900],[640,480]]){

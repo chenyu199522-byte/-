@@ -21,11 +21,16 @@ export interface ActivityEntry {
 export interface EvidenceImage {
   id: string; name: string; mime: string; size: number; addedAt: string;
 }
+export interface NewAccountRecord {id:string;kind:'dd'|'debit'|'credit'|'balance';date:ISODate;amountCents:number;note:string}
 export interface DepositBalance {id:string;date:ISODate;amountCents:number;note:string}
 export interface ComponentReceipt {date:ISODate;cents:number}
 export interface RewardOffer {
   promoCode?:string;
   transactionGoal?:number|null;
+  transactionMode?:'total'|'periodic';
+  transactionCycleBasis?:'opening'|'calendar'|'statement';
+  transactionCycleCount?:number|null;
+  transactionStatementDay?:number|null;
   transactionDeadlineDays?:number|null;
   depositGoalCents?:number|null;
   depositDeadlineDays?:number|null;
@@ -54,6 +59,8 @@ export interface RewardOffer {
   requirements: string;
   ddAmountCents: number | null;
   ddCount: number | null;
+  /** Missing on existing records preserves per-deposit qualification when a count is set. */
+  ddAmountMode?: 'total' | 'per_deposit';
   cycleBasis?: 'opening' | 'calendar' | 'statement' | 'custom';
   statementDay?: number | null;
   rewardCycleCount?: number | null;

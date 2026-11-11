@@ -206,6 +206,7 @@ export function ddProgress(
   const deposits = valid.filter(e => !e.kind || e.kind === 'dd');
   const eligible = deposits.filter(
     (e) =>
+      o.ddAmountMode === 'total' ||
       o.ddCount === null ||
       o.ddAmountCents === null ||
       e.amountCents >= o.ddAmountCents,
@@ -227,12 +228,12 @@ export function ddProgress(
   const done =
     known && creditTotal >= creditGoal &&
     (required
-      ? eligible.length >= required
+      ? eligible.length >= required && (o.ddAmountMode !== 'total' || totalCents >= (o.ddAmountCents ?? 0))
       : totalCents >= (o.ddAmountCents ?? 0));
   const ddRatio = !known
     ? 0
     : required
-      ? Math.min(eligible.length / required, 1)
+      ? Math.min(eligible.length / required, o.ddAmountMode === 'total' && o.ddAmountCents ? totalCents/o.ddAmountCents : 1, 1)
       : o.ddAmountCents
         ? Math.min(totalCents / o.ddAmountCents, 1)
         : 1;
@@ -241,7 +242,9 @@ export function ddProgress(
   const completedOn = !done
     ? null
     : required
-      ? eligible[required - 1].date
+      ? o.ddAmountMode === 'total'
+        ? [eligible[required-1].date, o.ddAmountCents ? deposits.find(e => (accumulated += e.amountCents) >= o.ddAmountCents!)?.date : a.openedOn].filter(Boolean).sort().at(-1) || null
+        : eligible[required - 1].date
       : !ddKnown || o.ddAmountCents === 0
         ? a.openedOn
         : deposits.find(
@@ -307,10 +310,38 @@ export function depositProgress(a:RewardAccount,o:RewardOffer,today=todayISO()) 
     ratio:days?elapsed/days:done?1:0,known:!!start&&!!end};
 }
 export function transactionProgress(a:RewardAccount,o:RewardOffer,today=todayISO()) {
-  const deadline=o.transactionDeadlineDays!=null?addDays(a.openedOn,o.transactionDeadlineDays):null;
+  const periodic=o.transactionMode==='periodic';
+  const deadline=!periodic && o.transactionDeadlineDays!=null?addDays(a.openedOn,o.transactionDeadlineDays):null;
   const rows=(a.qualifyingTransactions||[]).filter(r=>r.date>=a.openedOn&&r.date<=today&&(!a.closedOn||r.date<=a.closedOn)&&(!deadline||r.date<=deadline)).sort((x,y)=>x.date.localeCompare(y.date));
-  const goal=o.transactionGoal||0,done=!!goal&&rows.length>=goal;
-  return {goal,count:rows.length,deadline,done,last:done?rows[goal-1].date:null,ratio:goal?Math.min(1,rows.length/goal):0,late:!!deadline&&deadline<today&&!done};
+  const goal=o.transactionGoal||0;
+  type Period={start:string;end:string;count:number;done:boolean;last:string|null;ratio:number;late:boolean};
+  const periods:Period[]=[];
+  let currentIndex=0;
+  if (periodic && goal && o.transactionCycleBasis && (o.transactionCycleBasis!=='statement'||o.transactionStatementDay)) {
+    const schedule={...o,cycleBasis:o.transactionCycleBasis,statementDay:o.transactionStatementDay};
+    const until=a.closedOn && a.closedOn<today?a.closedOn:today;
+    const month=(d:string)=>Number(d.slice(0,4))*12+Number(d.slice(5,7));
+    currentIndex=Math.max(0,month(until)-month(a.openedOn));
+    const candidate=rewardCycleRange(a,schedule,currentIndex);
+    if(until<candidate.start)currentIndex=Math.max(0,currentIndex-1);
+    else if(until>candidate.end)currentIndex++;
+    const length=o.transactionCycleCount || currentIndex+1;
+    for(let i=0;i<length;i++) {
+      const {start,end}=rewardCycleRange(a,schedule,i);
+      const matches=rows.filter(r=>r.date>=start&&r.date<=end),done=matches.length>=goal;
+      periods.push({start,end,count:matches.length,done,last:done?matches[goal-1].date:null,ratio:Math.min(1,matches.length/goal),late:today>end&&!done});
+    }
+  }
+  const completedPeriods=periods.filter(p=>p.done).length;
+  if(periodic) {
+    const current=periods[Math.min(currentIndex,Math.max(0,periods.length-1))];
+    const done=!!o.transactionCycleCount && periods.length===o.transactionCycleCount && completedPeriods===periods.length;
+    return {goal,count:current?.count||0,deadline:current?.end||null,done,last:done?periods.at(-1)!.last:null,
+      ratio:o.transactionCycleCount?periods.reduce((n,p)=>n+p.ratio,0)/o.transactionCycleCount:current?.ratio||0,
+      late:periods.some(p=>p.late),periods,completedPeriods,currentIndex};
+  }
+  const done=!!goal&&rows.length>=goal;
+  return {goal,count:rows.length,deadline,done,last:done?rows[goal-1].date:null,ratio:goal?Math.min(1,rows.length/goal):0,late:!!deadline&&deadline<today&&!done,periods,completedPeriods,currentIndex};
 }
 export function qualificationProgress(a:RewardAccount,o:RewardOffer,s:RewardState,today=todayISO()) {
   const dd=ddProgress(a,o,s,today),deposit=depositProgress(a,o,today),transactions=transactionProgress(a,o,today);
@@ -649,6 +680,11 @@ export function validateState(s: RewardState, today = todayISO()) {
     if (o.payoutTiming !== undefined && !["within","after"].includes(o.payoutTiming)) throw new Error("奖励发放方式无效。");
     if (o.payoutDayUnit !== undefined && !["calendar","business"].includes(o.payoutDayUnit)) throw new Error("奖励到账期限单位无效。");
     if (o.feeGoalCents != null) nullableInt(o.feeGoalCents,"免月费门槛",1);
+    if (o.ddAmountMode !== undefined && !['total','per_deposit'].includes(o.ddAmountMode)) throw new Error("DD 金额计算方式无效。");
+    if (o.transactionMode !== undefined && !['total','periodic'].includes(o.transactionMode)) throw new Error('合格交易计算方式无效。');
+    if (o.transactionCycleBasis !== undefined && !['opening','calendar','statement'].includes(o.transactionCycleBasis)) throw new Error('合格交易周期无效。');
+    if (o.transactionCycleCount!=null && (!Number.isInteger(o.transactionCycleCount)||o.transactionCycleCount<1||o.transactionCycleCount>36)) throw new Error('交易考核期数须为 1–36 的整数。');
+    if (o.transactionStatementDay!=null && (!Number.isInteger(o.transactionStatementDay)||o.transactionStatementDay<1||o.transactionStatementDay>31)) throw new Error('交易账单截止日须为 1–31。');
     if (o.feeMetric !== undefined && !["dd","debit","credit"].includes(o.feeMetric)) throw new Error("免月费记录类型无效。");
     if (o.feeBasis !== undefined && !["opening","calendar","statement"].includes(o.feeBasis)) throw new Error("免月费周期无效。");
     if (o.feeStatementDay != null && (!Number.isInteger(o.feeStatementDay) || o.feeStatementDay<1 || o.feeStatementDay>31)) throw new Error("结账日应在 1 至 31 之间。");
@@ -771,4 +807,10 @@ export function activityTotals(s: RewardState, offerIds: string[], today = today
   return {total: sum(earnings), month: sum(earnings.filter(e => e.date.slice(0,7) === today.slice(0,7))),
     deposits: sum(entries.filter(e => e.kind === "deposit")), withdrawals: sum(entries.filter(e => e.kind === "withdrawal")),
     lastDate: entries.map(e => e.date).sort().at(-1) || null, count: earnings.length};
+}
+
+export function ddRequirementLabel(o:RewardOffer) {
+  if (o.ddAmountCents==null) return o.ddCount ? `至少 ${o.ddCount} 笔` : '要求待填写';
+  if (!o.ddCount || o.ddAmountMode==='total') return `累计 ${money(o.ddAmountCents,o.currency)}${o.ddCount ? ` · 至少 ${o.ddCount} 笔` : ''}`;
+  return `每笔 ${money(o.ddAmountCents,o.currency)} · 至少 ${o.ddCount} 笔`;
 }

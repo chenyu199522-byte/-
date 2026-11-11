@@ -90,3 +90,18 @@ it('allows an explicitly permitted restart after the initial funding deadline wa
  const {o,a}=make();a.depositBalances!.push({id:'low',date:'2026-02-10',amountCents:0,note:''},{id:'back',date:'2026-02-12',amountCents:500000,note:''});
  expect(depositProgress(a,{...o,depositHoldBasis:'funded',depositHoldMonths:3,depositRestart:true},'2026-06-01')).toMatchObject({done:true,start:'2026-02-12'});
 });
+it('keeps per-period transaction counts independent and never carries excess into another month',()=>{
+ const {o,a,s}=make();Object.assign(o,{transactionMode:'periodic',transactionCycleBasis:'calendar',transactionCycleCount:2,transactionGoal:5,transactionDeadlineDays:null,depositGoalCents:null});
+ a.qualifyingTransactions=Array.from({length:10},(_,i)=>({id:'jan'+i,date:'2026-01-15',note:''}));
+ let p=transactionProgress(a,o,'2026-02-10');expect(p).toMatchObject({done:false,completedPeriods:1,ratio:0.5});expect(p.periods.map(x=>x.count)).toEqual([10,0]);
+ a.qualifyingTransactions.push(...Array.from({length:5},(_,i)=>({id:'feb'+i,date:'2026-02-01',note:''})));
+ expect(transactionProgress(a,o,'2026-02-10')).toMatchObject({done:true,completedPeriods:2,last:'2026-02-01'});expect(qualificationProgress(a,o,s,'2026-02-10').done).toBe(true);
+ delete (o as any).transactionMode;expect(transactionProgress(a,o,'2026-02-10')).toMatchObject({done:true,last:'2026-01-15'});
+});
+it('supports opening and statement transaction cycles and open-ended current-period tracking',()=>{
+ const {o,a}=make();a.openedOn='2026-01-11';Object.assign(o,{transactionMode:'periodic',transactionCycleBasis:'opening',transactionCycleCount:2,transactionGoal:1,transactionDeadlineDays:null});
+ a.qualifyingTransactions=[{id:'a',date:'2026-02-10',note:''},{id:'b',date:'2026-02-11',note:''}];
+ let p=transactionProgress(a,o,'2026-02-11');expect(p.periods.map(x=>x.count)).toEqual([1,1]);expect(p.done).toBe(true);
+ Object.assign(o,{transactionCycleBasis:'statement',transactionStatementDay:10});expect(transactionProgress(a,o,'2026-02-11').periods.map(x=>x.count)).toEqual([1,1]);
+ Object.assign(o,{transactionCycleCount:null});p=transactionProgress(a,o,'2026-02-11');expect(p).toMatchObject({done:false,count:1,ratio:1});
+});

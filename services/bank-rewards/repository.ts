@@ -9,7 +9,7 @@ import {
   type RewardDdEvent,
   type EligibilityRule,
 } from "./types";
-import { validateState, todayISO } from "./logic";
+import { validateState, todayISO, isISO } from "./logic";
 const id = () => crypto.randomUUID();
 const now = () => new Date().toISOString();
 
@@ -31,7 +31,7 @@ export const rewardRepository = {
     });
 
   },
-  saveOffer(userId: string, input: RewardOffer, rules: EligibilityRule[]) {
+  saveOffer(userId: string, input: RewardOffer, rules: EligibilityRule[], opening?: {openedOn:string}) {
     return this.mutate(userId, (s) => {
       const existing = s.offers.find((o) => o.id === input.id);
       if (input.id && !existing) throw new Error("活动不存在。");
@@ -43,6 +43,11 @@ export const rewardRepository = {
       if(existing && (existing.rewardMode||'combined')!==(input.rewardMode||'combined') &&
         s.accounts.some(a=>a.offerId===existing.id && (a.bonusReceivedOn || Object.keys(a.componentReceipts||{}).length)))
         throw new Error('已有到账记录，修改领奖方式前请先核对并撤销相应到账记录。');
+      if (existing && existing.currency !== input.currency) {
+        const accounts=s.accounts.filter(a=>a.offerId===existing.id);
+        if (accounts.some(a=>a.depositBalances?.length || a.bonusReceivedOn || Object.keys(a.componentReceipts||{}).length || s.ddEvents.some(e=>e.accountId===a.id)))
+          throw new Error('已有金额记录的活动不能直接更换币种，请新建对应币种的活动。');
+      }
       const previousHold = existing?.minHoldDays;
       const offer = {
         ...input,
@@ -52,6 +57,15 @@ export const rewardRepository = {
         createdAt: existing?.createdAt || now(),
         updatedAt: now(),
       };
+      // Save the application and first account in the same validated commit.
+      if (opening && offer.activityType !== "long_term" && offer.applicationStatus === "opened" &&
+          !s.accounts.some(a => a.offerId === offer.id && !a.historyOnly)) {
+        if (!isISO(opening.openedOn)) throw new Error("请填写实际开户日期。");
+        s.accounts.push({id:id(),userId,offerId:offer.id,name:"",openedOn:opening.openedOn,
+          closedOn:null,bonusReceivedOn:null,bonusReceivedCents:null,minHoldDays:offer.minHoldDays,
+          notes:"",closureMethod:offer.closureMethod,historyOnly:false,minHoldOverride:false,
+          syncIncome:false,exchangeRate:null,incomeCurrency:"USD",createdAt:now(),updatedAt:now()});
+      }
       if(offer.rewardMode==='separate')offer.bonusCents=(offer.ddBonusCents||0)+(offer.depositBonusCents||0);
       if (offer.applicationStatus !== "denied") {
         offer.deniedOn = null;
@@ -165,6 +179,40 @@ export const rewardRepository = {
     return this.mutate(userId,s=>{
       const a=s.accounts.find(a=>a.id===accountId);if(!a)throw new Error('账户不存在。');
       a.qualifyingTransactions=(a.qualifyingTransactions||[]).filter(r=>r.id!==rowId);a.updatedAt=now();
+    });
+  },
+  saveDdSources(userId:string, changes:{id:string;note:string}[]) {
+    return this.mutate(userId,s=>{
+      for(const change of changes) {
+        const event=s.ddEvents.find(e=>e.id===change.id);
+        if(!event || event.kind && event.kind!=='dd')throw new Error('DD 记录已变化，请重新选择活动。');
+        if(!change.note.trim())throw new Error('请补全每笔 DD 的来源备注。');
+        event.sourceNote=change.note.trim();
+        const account=s.accounts.find(a=>a.id===event.accountId)!;account.updatedAt=now();
+        s.offers.find(o=>o.id===account.offerId)!.updatedAt=now();
+      }
+    });
+  },
+  saveRecordBatch(userId:string, accountId:string, rows:import('./types').NewAccountRecord[]) {
+    return this.mutate(userId,s=>{
+      const a=s.accounts.find(a=>a.id===accountId);
+      if(!a || a.historyOnly)throw new Error('请选择可记录的开户账户。');
+      if(!rows.length || rows.length>100)throw new Error('每次请添加 1–100 笔记录。');
+      const offer=s.offers.find(o=>o.id===a.offerId)!;
+      const ids=new Set([...s.ddEvents.map(e=>e.id),...(a.depositBalances||[]).map(r=>r.id)]);
+      for(const [index,row] of rows.entries()) {
+        if(!row.id || ids.has(row.id))throw new Error(`第 ${index+1} 笔记录重复，请重新打开窗口。`);
+        ids.add(row.id);
+        if(!['dd','debit','credit','balance'].includes(row.kind))throw new Error(`第 ${index+1} 笔类型无效。`);
+        if(!isISO(row.date) || row.date<a.openedOn || row.date>todayISO() || a.closedOn && row.date>a.closedOn)throw new Error(`第 ${index+1} 笔日期须在账户存续期间，且不能晚于今天。`);
+        if(!Number.isSafeInteger(row.amountCents) || row.amountCents<0 || row.kind!=='balance' && row.amountCents===0)throw new Error(`第 ${index+1} 笔请填写有效金额。`);
+        if(row.kind==='balance') {
+          if(!offer.depositGoalCents)throw new Error('该活动未设置存款要求。');
+          if(a.depositBalances?.some(r=>r.date===row.date))throw new Error(`第 ${index+1} 笔：同一天只保留一条余额记录，请使用“修改金额”更正。`);
+          a.depositBalances=[...(a.depositBalances||[]),{id:row.id,date:row.date,amountCents:row.amountCents,note:row.note}];
+        } else s.ddEvents.push({id:row.id,userId,accountId,kind:row.kind,date:row.date,amountCents:row.amountCents,sourceNote:row.note});
+      }
+      a.updatedAt=now();offer.updatedAt=now();
     });
   },
   saveDd(userId: string, input: RewardDdEvent) {

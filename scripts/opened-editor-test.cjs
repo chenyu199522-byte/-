@@ -1,0 +1,40 @@
+const {_electron,expect}=require('playwright/test');
+const fs=require('fs'),path=require('path'),os=require('os'),assert=require('assert/strict');
+const bundle=require('esbuild').buildSync({entryPoints:['services/bank-rewards/testBank.ts'],bundle:true,platform:'node',format:'cjs',write:false}).outputFiles[0].text;
+const m={exports:{}};new Function('module','exports','require',bundle)(m,m.exports,require);
+const s=m.exports.createTestBank('local');s.accounts=[];s.ddEvents=[];
+Object.assign(s.offers[0],{applicationStatus:'unreviewed',feeBasis:undefined,feeFreeCycles:2});
+const root=fs.mkdtempSync(path.join(os.tmpdir(),'gf-opened-qa-'));
+fs.writeFileSync(path.join(root,'records.json'),JSON.stringify(s));
+let app;const button=(p,name)=>p.getByRole('button',{name,exact:true});
+(async()=>{try{
+ app=await _electron.launch({executablePath:process.argv[2]||path.resolve('release/win-unpacked/金羊毛.exe'),args:['--headless','--user-data-dir='+root]});
+ const p=await app.firstWindow();p.setDefaultTimeout(15000);
+ await app.evaluate(({BrowserWindow})=>{const w=BrowserWindow.getAllWindows()[0];w.webContents.setBackgroundThrottling(false);w.setContentSize(2200,1200);});
+ const edit=async()=>{await button(p,'操作 示例银行（虚拟）').click();await p.getByRole('menuitem',{name:'编辑活动',exact:true}).click();};
+ await edit();await p.locator('.br-field').filter({hasText:'申请结果'}).locator('select').selectOption('opened');
+ await button(p,'保存奖励活动').click();await expect(p.getByText('请填写实际开户日期。',{exact:true})).toBeVisible();
+ assert.equal(JSON.parse(fs.readFileSync(path.join(root,'records.json'))).accounts.length,0);
+ await p.locator('.br-field').filter({hasText:'实际开户日期 *'}).getByRole('button',{name:'选择日期',exact:true}).click();
+ await button(p,'今天').click();await button(p,'保存奖励活动').click();
+ await expect(p.locator('.br-condition-row')).toHaveCount(1);
+ const row=p.locator('[data-testid=reward-row]');
+ await expect(row.getByRole('progressbar',{name:'DD 进度',exact:true})).toHaveCount(0);
+ await expect(row.getByRole('progressbar',{name:'免月费进度',exact:true})).toHaveCount(1);
+ await expect(p.locator('.br-condition-row').getByRole('progressbar',{name:'工资 DD',exact:true})).toHaveCount(3);
+ const before=JSON.parse(fs.readFileSync(path.join(root,'records.json'))).accounts;
+ assert.equal(before.length,1);
+ await edit();await expect(p.getByText(/已关联账户 · 开户日期/)).toBeVisible();
+ await p.getByLabel('免月费计算周期',{exact:true}).selectOption('opening');await button(p,'保存奖励活动').click();
+ await expect(row.getByRole('progressbar',{name:'免月费进度',exact:true})).toHaveAttribute('value','1');await expect(row).toContainText('本期自动免');
+ assert.deepEqual(JSON.parse(fs.readFileSync(path.join(root,'records.json'))).accounts,before);
+ const cdp=await p.context().newCDPSession(p);
+ for(const width of [2200,1280,800,640]){
+  await cdp.send('Emulation.setDeviceMetricsOverride',{width,height:900,deviceScaleFactor:1,mobile:false});
+  assert.ok(await p.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+2));
+ }
+ await expect(button(p,'测试模式')).toHaveCount(0);
+ assert.deepEqual(JSON.parse(fs.readFileSync(path.join(root,'records.json'))).accounts,before);
+ assert.equal(await app.evaluate(({BrowserWindow})=>BrowserWindow.getAllWindows().some(w=>w.isVisible())),false);
+ console.log('PASS opened editor: missing date blocked; account created atomically; repeat save retained account; monthly conditions and fee-only main row; unknown and free fee rails; responsive sizes; test mode isolated.');
+}finally{if(app)await app.close();fs.rmSync(root,{recursive:true,force:true,maxRetries:4,retryDelay:200});}})().catch(e=>{console.error(e);process.exitCode=1;});

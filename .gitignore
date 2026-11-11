@@ -4,3 +4,7 @@ release/
 test-results/
 *.log
 .env*
+# Local acceptance evidence may contain personal records or machine paths.
+docs/qa/*
+!docs/qa/1.2.0.md
+!docs/qa/1.2.16.md

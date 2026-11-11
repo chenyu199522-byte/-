@@ -18,10 +18,10 @@ export const guideSites = [
   ['美国信用卡指南','https://www.uscreditcardguide.com/zh/'],
   ['Doctor of Credit · 英文','https://www.doctorofcredit.com/'],
 ];
-export default function ReferenceSites({kind,state}:{kind:'dd'|'guides';state:RewardState}) {
+export default function ReferenceSites({kind,state,showAI=true}:{kind:'dd'|'guides';state:RewardState;showAI?:boolean}) {
   const sites=kind==='dd'?ddSites:guideSites;
   return <section className="br-reference-panel">
-    {kind==='dd'&&<AIAssistant kind="dd" state={state}/>}
+    {kind==='dd'&&showAI&&<AIAssistant kind="dd" state={state}/>}
     <h2>{kind==='dd'?'DD条件检测':'论坛与指南'}</h2>
     <p className="br-hint">{kind==='dd'?'查阅银行奖励条款、DD 条件与用户经验。点击网站后在默认浏览器中打开。':'阅读信用卡、银行账户与开户奖励的讨论和指南。'}</p>
     <div className="br-reference-grid">{sites.map(([name,url])=><a href={url} target="_blank" rel="noreferrer" key={url}>

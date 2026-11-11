@@ -1,6 +1,6 @@
 import React, {useEffect, useRef, useState} from 'react';
 import {ArrowDown, ArrowUp, X} from 'lucide-react';
-import {columns, defaultLayout, minimumWidth, required, type Layout} from '../services/layout';
+import {columns, defaultLayout, housekeeperLayout, minimumWidth, required, type Layout} from '../services/layout';
 
 interface Props {value:Layout; onChange:(v:Layout)=>void; onCancel:()=>void; onSave:()=>Promise<void>}
 function Slider({label,value,low,high,step=1,unit='px',change}: {
@@ -34,14 +34,19 @@ export function LayoutEditor({value, onChange, onCancel, onSave}:Props) {
           placeholder="金羊毛" onChange={e=>onChange({...value,appName:e.target.value})}/><small>用于软件首页和窗口标题</small></label>
         <label className="le-check"><input type="checkbox" checked={value.scaleWithWindow}
           onChange={e=>onChange({...value,scaleWithWindow:e.target.checked})}/>随窗口等比例缩放</label>
-        <Slider label="界面字号" value={value.font} low={85} high={150} step={5} unit="%" change={font=>onChange({...value,font})}/>
-        <Slider label="页面边距" value={value.margin} low={8} high={48} change={margin=>onChange({...value,margin})}/>
-        <Slider label="区域间距" value={value.gap} low={6} high={28} change={gap=>onChange({...value,gap})}/>
+        <Slider label="整体大小" value={value.overallScale} low={50} high={125} step={5} unit="%" change={overallScale=>onChange({...value,overallScale})}/>
+        <p>整体大小同时缩放文字、按钮、卡片和间距。恢复原版排版不会改变整体大小和缩放开关。</p>
+        <button type="button" onClick={()=>onChange(housekeeperLayout(value))}>个人管家原版大小</button>
+        <Slider label="界面字号" value={value.font} low={60} high={150} step={5} unit="%" change={font=>onChange({...value,font})}/>
+        <label className="le-check"><input type="checkbox" checked={value.autoMargin} onChange={e=>onChange({...value,autoMargin:e.target.checked})}/>原版自适应页边距</label>
+        <Slider label="页面边距" value={value.margin} low={4} high={48} change={margin=>onChange({...value,autoMargin:false,margin})}/>
+        <Slider label="区域间距" value={value.gap} low={2} high={28} change={gap=>onChange({...value,gap})}/>
       </>}
       {tab==='统计卡片' && <Slider label="卡片最小宽度" value={value.cardWidth} low={120} high={300}
         change={cardWidth=>onChange({...value,cardWidth})}/>}
       {tab==='活动表格' && <>
-        <Slider label="活动行最小高度" value={value.rowHeight} low={60} high={160} change={rowHeight=>onChange({...value,rowHeight})}/>
+        <label className="le-check"><input type="checkbox" checked={value.tableSizing === "content"} onChange={e=>onChange({...value,tableSizing:e.target.checked?"content":"custom"})}/>按内容自动分配列宽（个人管家原版）</label>
+        <Slider label="活动行最小高度" value={value.rowHeight} low={36} high={160} change={rowHeight=>onChange({...value,rowHeight})}/>
         <label className="le-check"><input type="checkbox" checked={value.adaptive} onChange={e=>onChange({...value,adaptive:e.target.checked})}/>窄窗口优先显示关键列</label>
       </>}
       {tab!=='页面' && value[key].map((item,index)=>{
@@ -53,7 +58,7 @@ export function LayoutEditor({value, onChange, onCancel, onSave}:Props) {
           <button aria-label={'上移'+name} disabled={!index} onClick={()=>move(key,index,-1)}><ArrowUp size={15}/></button>
           <button aria-label={'下移'+name} disabled={index===value[key].length-1} onClick={()=>move(key,index,1)}><ArrowDown size={15}/></button>
         </div>{col && 'width' in item && <Slider label={name+'列宽'} value={item.width} low={minimumWidth(col.id)} high={460}
-          change={width=>onChange({...value,columns:value.columns.map(c=>c.id===item.id?{...c,width}:c)})}/>}</div>;
+          change={width=>onChange({...value,tableSizing:"custom",columns:value.columns.map(c=>c.id===item.id?{...c,width}:c)})}/>}</div>;
       })}
     </section>
     {error && <p role="alert">{error}</p>}

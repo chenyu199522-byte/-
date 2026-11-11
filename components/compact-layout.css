@@ -1,0 +1,76 @@
+/* Preserve Housekeeper reading sizes; only de-duplication and test controls differ. */
+.br-table .br-fee-summary {display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;}
+.br-table tbody tr[data-testid] > td {padding:15px;line-height:1.45;}
+.br-table th {padding:12px 15px;}
+.br-table .br-bank-cell {gap:15px;}
+.br-table .br-bank-mark {width:57px;height:57px;flex-shrink:0;}
+.br-table .br-badge {padding:9px 12px;}
+.br-condition-row .br-condition-layout[data-compact=true] {flex-wrap:wrap;gap:6px;}
+.br-condition-layout[data-compact=true] > .br-condition-board {flex:1 1 100%;}
+.br-condition-row .br-condition-board .br-condition-period {width:clamp(285px,16vw,352px);flex:0 1 clamp(285px,16vw,352px);}
+.br-condition-notes {flex:1 1 100%;min-width:0;padding:0 18px;font-size:.9375rem;color:var(--br-muted);}
+.br-condition-notes summary {cursor:pointer;width:fit-content;}
+.br-condition-notes p {white-space:pre-wrap;overflow-wrap:anywhere;margin:5px 0;}
+.gf-workspace {gap:8px;}
+
+/* Original table flow; manual widths remain available in the layout editor. */
+.br-table[data-sizing=content] {table-layout:auto;}
+.br-table[data-sizing=content] th,.br-table[data-sizing=content] .br-column-sort,.br-table[data-sizing=content] .br-money {white-space:nowrap;}
+.br-table[data-sizing=content] .br-bank-cell {min-width:205px;flex-wrap:nowrap;}
+.br-table[data-sizing=content] .br-bank-cell > div {flex:initial;}
+.br-table[data-sizing=content] .br-row-action-buttons {flex-wrap:nowrap;}
+.br-table[data-sizing=content] .br-split-progress {grid-template-columns:repeat(2,minmax(110px,1fr));gap:16px;}
+.br-table[data-sizing=content] .br-condition-layout {display:block;padding:0;}
+.br-table[data-sizing=content] .br-condition-layout > .br-condition-board {width:fit-content;max-width:100%;}
+.br-table[data-sizing=content] .br-condition-board .br-condition-period {flex:initial;}
+.br-table[data-sizing=content] .br-condition-notes {margin-top:4px;}
+
+/* 1.0.0 (508dbbe) statistics layout, after preserving editable card order. */
+.br-center[data-layout=content] .br-stats {grid-template-columns:repeat(5,minmax(0,1fr));gap:10px;}
+@media(max-width:1100px){.br-center[data-layout=content] .br-stats {grid-template-columns:repeat(5,minmax(125px,1fr));}}
+@media(max-width:700px){.br-center[data-layout=content] .br-stats {grid-template-columns:repeat(2,minmax(0,1fr));}.br-center[data-layout=content] .br-stat:last-child {grid-column:1/-1;}}
+
+.br-fee-progress {margin:6px 0 4px;max-width:240px;}
+.br-fee-progress progress::-webkit-progress-value {background:#a99ce0;}
+
+.br-cycle-completion {display:flex;align-items:center;gap:10px;color:var(--text-primary);font-variant-numeric:tabular-nums;}
+.br-cycle-dots {display:flex;flex-wrap:wrap;gap:7px;max-width:170px;}
+.br-cycle-dot {display:block;width:10px;height:10px;border-radius:50%;background:#94a3b84d;}
+.br-cycle-dot[data-complete=true] {background:#21c7ac;}
+.br-period-remaining {font-style:normal;font-weight:500;}
+.br-condition-period > header {flex-wrap:wrap;gap:4px 10px;}
+.br-condition-period[data-status=current] > header,
+.br-condition-row .br-condition-period[data-status=current] > header b,
+.br-condition-period[data-status=current] > header span,
+.br-condition-period[data-status=met] > header,
+.br-condition-period[data-status=met] > header span {color:#21c7ac;}
+.br-fee-meter {min-width:0;}
+
+.br-deposit-actions {display:flex;gap:8px;flex-wrap:wrap;margin-top:8px;}
+.br-deposit-actions button {font-size:0.875rem;padding:5px 9px;}
+
+/* Compact identity and progress headings without reducing readable type. */
+.br-bank-heading {display:flex;align-items:baseline;flex-wrap:wrap;gap:3px 10px;}
+.br-bank-heading > span {font-size:1.03125rem;color:var(--br-muted);}
+.br-table .br-mini-tags {margin-top:4px;}
+.br-summary-heading {display:flex;align-items:baseline;flex-wrap:wrap;gap:2px 8px;}
+.br-summary-heading > span {font-size:.9375rem;color:var(--br-muted);}
+.br-cycle-label {font-size:.9375rem;font-weight:600;white-space:nowrap;}
+
+/* Deposit actions occupy the same compact slot as a consumption meter. */
+.br-condition-row .br-deposit-actions {margin-top:7px;}
+.br-condition-row .br-deposit-actions button {min-height:calc(1.03125rem * 1.45 + 9px);padding-block:0;}
+
+.br-batch-records {max-height:55vh;overflow:auto;overscroll-behavior:contain;}
+.br-batch-entry {border:0;min-width:0;margin:0;padding:0;}
+.br-batch-records[data-multiple=true] .br-batch-entry {border:1px solid var(--br-border);border-radius:12px;padding:14px;margin-bottom:12px;}
+.br-batch-heading,.br-batch-add {display:flex;align-items:center;justify-content:space-between;gap:12px;}
+.br-batch-heading {margin-bottom:12px;}
+.br-batch-heading button {font-size:.875rem;padding:5px 10px;}
+.br-batch-add {margin-top:16px;flex-wrap:wrap;}
+.br-batch-add span {color:var(--br-muted);font-size:.875rem;}
+
+.br-dd-check-results {display:grid;gap:12px;margin-block:16px;}
+.br-dd-check-results h3,.br-dd-check-results p {overflow-wrap:anywhere;}
+.br-dd-missing {max-height:55vh;overflow:auto;}
+.br-dd-missing section {padding:10px 0;border-bottom:1px solid var(--br-border);}

@@ -1,6 +1,7 @@
+import DDActivityCheck from "./DDActivityCheck";
 import AIAssistant from './AIAssistant';
 import ReferenceSites from './ReferenceSites';
-import ConditionProgress, {SplitProgress} from './ConditionProgress';
+import ConditionProgress, {SplitProgress,hasMultipleConditions,CycleCompletion,hasFeeRequirement} from './ConditionProgress';
 import SettingsSelect from "../../components/SettingsSelect";
 import {useLocalToday} from '../../services/useLocalToday';
 import React, { useEffect, useMemo, useState } from "react";
@@ -36,7 +37,7 @@ import {
 import {
   accountStatus,
   countdown,
-  ddProgress, qualificationProgress, rewardPayoutSchedule, payoutTermLabel,
+  ddProgress, ddRequirementLabel, qualificationProgress, rewardPayoutSchedule, payoutTermLabel,
   cycleBasisLabels,
   eligibility,
   primaryAccount,
@@ -78,9 +79,12 @@ const filters = [
   ["eligible", "可重奖"],
   ["archived", "已归档"],
 ];
-export default function BankRewards({ user, focus, initialLayout }: { user: User; initialLayout: Layout; focus?: {offerId?:string;accountId?:string;nonce:number} }) {
+export default function BankRewards({ user, focus, initialLayout }: {
+  user: User; initialLayout: Layout; focus?: {offerId?:string;accountId?:string;nonce:number};
+}) {
   const today = useLocalToday();
   const [aiCreate,setAICreate]=useState(false);
+  const [ddCheck,setDdCheck]=useState(false);
   const [savedLayout, setSavedLayout] = useState(initialLayout);
   const [draft, setDraft] = useState<Layout | null>(null);
   const [width,setWidth] = useState(window.innerWidth);
@@ -92,8 +96,8 @@ export default function BankRewards({ user, focus, initialLayout }: { user: User
     return ()=>window.removeEventListener('resize',resize);
   },[]);
   useEffect(()=>{
-    void window.goldenFleece.previewScale(layout.scaleWithWindow).catch(()=>{});
-  },[layout.scaleWithWindow]);
+    void window.goldenFleece.previewScale(layout.scaleWithWindow,layout.overallScale).catch(()=>{});
+  },[layout.scaleWithWindow,layout.overallScale]);
   useEffect(()=>{
     const name=readLayout(layout).appName;
     document.title=name;
@@ -102,7 +106,7 @@ export default function BankRewards({ user, focus, initialLayout }: { user: User
   React.useLayoutEffect(()=>{
     const style=document.documentElement.style;
     style.fontSize = (16 * layout.font / 100) + 'px';
-    style.setProperty('--layout-margin', layout.margin+'px');
+    style.setProperty('--layout-margin', layout.autoMargin ? 'clamp(16px, 2vw, 36px)' : layout.margin+'px');
     style.setProperty('--layout-gap', layout.gap+'px');
     style.setProperty('--layout-card', layout.cardWidth+'px');
     style.setProperty('--layout-row', layout.rowHeight+'px');
@@ -111,7 +115,7 @@ export default function BankRewards({ user, focus, initialLayout }: { user: User
   const totalWidth = shown.reduce((sum,c)=>sum+c.width,0);
   const condensed = visibleColumns(layout,width,false).length < layout.columns.filter(c=>c.visible).length;
   const [state, setState] = useState(() => rewardRepository.read(user.id)),
-    [activityView,setActivityView] = useState<"one_time"|"long_term"|"dd"|"guides">("one_time"),
+    [activityView,setActivityView] = useState<"one_time"|"long_term"|"guides">("one_time"),
     [filter, setFilter] = useState("active"),
     [query, setQuery] = useState(""),
     [sort, setSort] = useState("size"),
@@ -224,7 +228,7 @@ export default function BankRewards({ user, focus, initialLayout }: { user: User
     if (mode === "open") { a = a || primaryAccount(o, state); if (a) mode = "edit"; }
 
     setMenu(null);
-    if (["receipt", "dd", "close"].includes(mode) && !a) {
+    if (["receipt", "dd", "balance", "balance-edit", "close"].includes(mode) && !a) {
       setAction({ mode: "open", offerId: o.id });
       return;
     }
@@ -273,7 +277,7 @@ export default function BankRewards({ user, focus, initialLayout }: { user: User
     );
   return (
     <div
-      className="br-root br-center"
+      className="br-root br-center" data-layout={layout.tableSizing}
       onKeyDown={(e) => {
         if (e.key === "Escape") setMenu(null);
       }}
@@ -319,6 +323,7 @@ export default function BankRewards({ user, focus, initialLayout }: { user: User
           </button>
         </div>
       </header>
+      {ddCheck&&<Modal title="DD条件检测" wide onClose={()=>setDdCheck(false)}><DDActivityCheck state={state} onSaved={save}/></Modal>}
       {aiCreate&&<Modal title="AI 一键填写活动" wide onClose={()=>setAICreate(false)}><AIAssistant kind="offer" state={state} onDraft={o=>{setAICreate(false);setDetail(null);setEditor(o);}}/></Modal>}
       {draft && <LayoutEditor value={draft} onChange={setDraft} onCancel={()=>setDraft(null)} onSave={async()=>{
         const settings=readLayout(draft);
@@ -335,10 +340,9 @@ export default function BankRewards({ user, focus, initialLayout }: { user: User
       <div className="br-actions br-activity-types" role="group" aria-label="活动类型切换">
         <button className={activityView === "one_time" ? "br-primary" : ""} aria-pressed={activityView === "one_time"} onClick={()=>setActivityView("one_time")}>一次性活动</button>
         <button className={activityView === "long_term" ? "br-primary" : ""} aria-pressed={activityView === "long_term"} onClick={()=>setActivityView("long_term")}>长期活动</button>
-        <button className={activityView==="dd"?"br-primary":""} aria-pressed={activityView==="dd"} onClick={()=>setActivityView("dd")}>DD条件检测</button>
         <button className={activityView==="guides"?"br-primary":""} aria-pressed={activityView==="guides"} onClick={()=>setActivityView("guides")}>论坛与指南</button>
       </div>
-      {activityView === 'dd' || activityView === 'guides' ? <ReferenceSites kind={activityView} state={state}/> : activityView === "long_term" ? <LongTermActivities user={user} state={state} today={today} focus={longTermFocus} onFocusHandled={() => setLongTermFocus(undefined)} onSaved={save} onEdit={setEditor} onDelete={o=>ask("删除该长期活动及全部收益、存入和提取明细？财务账目保持不变。",()=>rewardRepository.deleteOffer(user.id,o.id))}/> : <>
+      {activityView === 'guides' ? <ReferenceSites kind={activityView} state={state}/> : activityView === "long_term" ? <LongTermActivities user={user} state={state} today={today} focus={longTermFocus} onFocusHandled={() => setLongTermFocus(undefined)} onSaved={save} onEdit={setEditor} onDelete={o=>ask("删除该长期活动及全部收益、存入和提取明细？财务账目保持不变。",()=>rewardRepository.deleteOffer(user.id,o.id))}/> : <>
       <div className="br-stats">
         {[
           {
@@ -402,6 +406,7 @@ export default function BankRewards({ user, focus, initialLayout }: { user: User
               {label} ({data.filter((r) => match(r, id)).length})
             </button>
           ))}
+          <button onClick={()=>setDdCheck(true)}>DD条件检测</button>
         </div>
         <div className="br-search-group">
           <label className="br-search">
@@ -448,8 +453,8 @@ export default function BankRewards({ user, focus, initialLayout }: { user: User
       </div>
       <div className="br-table-frame">
         <div className="br-table-scroll">
-          <table className="br-table" style={{minWidth:totalWidth}}>
-            <colgroup>{shown.map(c=><col key={c.id} style={{width:(100*c.width/totalWidth)+'%'}}/>)}</colgroup>
+          <table className="br-table" data-sizing={layout.tableSizing} style={{minWidth:layout.tableSizing === "custom" ? totalWidth : 1850}}>
+            {layout.tableSizing === "custom" && <colgroup>{shown.map(c=><col key={c.id} style={{width:(100*c.width/totalWidth)+'%'}}/>)}</colgroup>}
             <thead>
               <tr>
                 {shown.map(({id}) => {
@@ -487,8 +492,7 @@ export default function BankRewards({ user, focus, initialLayout }: { user: User
                       <div className="br-bank-cell">
                         <BankMark name={o.bankName} />
                         <div>
-                          <strong>{o.bankName}</strong>
-                          <span>{o.productName || "未注明产品"}</span>
+                          <div className="br-bank-heading"><strong>{o.bankName}</strong>{o.productName && <span>{o.productName}</span>}</div>
                           <div className="br-mini-tags">
                             <em>{o.accountType || "账户"}</em>
                             {a?.historyOnly && <em>历史</em>}
@@ -513,16 +517,17 @@ export default function BankRewards({ user, focus, initialLayout }: { user: User
                       </strong>{o.rewardMode==="separate"&&<small>DD {money(o.ddBonusCents??null,o.currency)} + 存款 {money(o.depositBonusCents??null,o.currency)}</small>}
                     </td>,
                   requirements: <td>
+                      {a && !a.historyOnly && hasMultipleConditions(o) ? <span>已在下方展示</span> : <>
                       <span>
-                        {o.rewardCycleCount ? `每期工资 DD ≥ ${money(o.ddAmountCents,o.currency)}` : o.ddAmountCents!=null?money(o.ddAmountCents, o.currency):o.depositGoalCents?"存款持有条件":o.transactionGoal?"合格交易条件":"要求待填写"}
-                        {!o.rewardCycleCount && o.ddCount !== null && ` × ${o.ddCount} 次`}
+                        {o.rewardCycleCount ? `每期工资 DD ≥ ${money(o.ddAmountCents,o.currency)}` : o.ddAmountCents!=null || o.ddCount!=null?ddRequirementLabel(o):o.depositGoalCents?"存款持有条件":o.transactionGoal?"合格交易条件":"要求待填写"}
                       </span>
                       {o.rewardCycleCount ? <><small>每期借记卡消费 ≥ {money(o.cycleDebitCents ?? 0,o.currency)}</small>{!!o.cycleCreditCents && <small>每期信用卡消费 ≥ {money(o.cycleCreditCents,o.currency)}</small>}<small>{cycleBasisLabels[o.cycleBasis || "opening"]} · 连续 {o.rewardCycleCount} 期</small></> : <small>{o.depositGoalCents?"保持余额 ≥ "+money(o.depositGoalCents,o.currency):"开户奖励 · 合格直接存款"}</small>}
-                      {!!o.transactionGoal&&<small>完成 {o.transactionGoal} 笔合格交易</small>}
-                      {o.feeNote && <small>免月费 · {o.feeNote}{o.monthlyFee && `（月费 ${o.monthlyFee}）`}</small>}
+                      {!!o.transactionGoal&&<small>{o.transactionMode==='periodic'?'每期完成':'累计完成'} {o.transactionGoal} 笔合格交易</small>}
+                      {o.feeNote && <small className="br-fee-summary" title={'免月费 · '+o.feeNote+(o.monthlyFee?`（月费 ${o.monthlyFee}）`:'')}>免月费 · {o.feeNote}{o.monthlyFee && `（月费 ${o.monthlyFee}）`}</small>}
+                      </> }
                     </td>,
                   progress: <td className="br-progress-cell">
-                      <strong
+                      {dd && !!dd.periods.length && !a?.historyOnly ? <CycleCompletion periods={dd.periods}/> : <strong
                         className={`br-text-${a?.bonusReceivedOn ? "purple" : dd?.late ? "red" : dd?.near ? "amber" : "teal"}`}
                       >
                         {a?.historyOnly
@@ -536,8 +541,8 @@ export default function BankRewards({ user, focus, initialLayout }: { user: User
                                 : o.expiresOn
                                   ? `活动 ${countdown(o.expiresOn, today)}`
                                   : "开户后开始追踪"}
-                      </strong>
-                      {a && dd && !a.historyOnly && (o.feeGoalCents || o.feeFreeCycles || o.feeNote) ? <SplitProgress offer={o} account={a} dd={dd} today={today}/> : !dd?.periods.length && <Progress
+                      </strong>}
+                      {a && dd && !a.historyOnly && hasFeeRequirement(o) ? <SplitProgress offer={o} account={a} dd={dd} today={today} feeOnly={hasMultipleConditions(o)}/> : !(a && !a.historyOnly && hasMultipleConditions(o)) && !dd?.periods.length && <Progress
                         value={a?.bonusReceivedOn ? 1 : progress}
                         tone={
                           a?.bonusReceivedOn
@@ -547,12 +552,12 @@ export default function BankRewards({ user, focus, initialLayout }: { user: User
                               : "teal"
                         }
                       />}
-                      <small>
+                      {!(a && !a.historyOnly && hasMultipleConditions(o)) && <small>
                         {nextDeadline || o.expiresOn || "—"}
                         {dd &&
                           !a?.historyOnly &&
                           (o.rewardCycleCount ? ` · ${dd.count}/${o.rewardCycleCount} 期` : ` · ${dd.count}/${o.ddCount ?? "—"} 笔`)}
-                      </small>
+                      </small>}
                     </td>,
                   opened: <td>
                       <span>{a?.openedOn || "—"}</span>
@@ -699,6 +704,7 @@ export default function BankRewards({ user, focus, initialLayout }: { user: User
                                 setMenu(null);
                               }]] : []),
                               ["记录 DD", () => doAction("dd", o, a)],
+                              ...(o.depositGoalCents ? [["添加存款记录",()=>doAction("balance",o,a)]] : []),
                               [a?.bonusReceivedOn ? "修改到账" : "奖励到账", () => doAction("receipt", o, a)],
                               [a?.closedOn ? "修改关户" : "关户", () => doAction("close", o, a)],
                               ["新增历史账户", () => doAction("history", o)],
@@ -756,7 +762,7 @@ export default function BankRewards({ user, focus, initialLayout }: { user: User
                     {shown.map(c=><React.Fragment key={c.id}>{cells[c.id]}</React.Fragment>)}
                   </tr>
                   {a && dd && !a.historyOnly && (!!dd.periods.length || !!o.cycleCreditCents || !!o.depositGoalCents || !!o.transactionGoal || !!o.promoCode || !!o.additionalConditions || !!o.requirements) && <tr className="br-condition-row"><td colSpan={shown.length}>
-                    <ConditionProgress key={a.id} offer={o} account={a} dd={dd} today={today}/>
+                    <ConditionProgress key={a.id} offer={o} account={a} dd={dd} today={today} onDepositAction={edit=>doAction(edit?"balance-edit":"balance",o,a)}/>
                   </td></tr>}</React.Fragment>
                 );
               })}

@@ -30,7 +30,7 @@ async function run() {
   await p.getByRole('button', {name:'新增奖励活动', exact:true}).first().click();
   await p.getByLabel('机构 / 平台名称 *', {exact:true}).fill('独立版测试银行');
   await p.getByLabel('广告奖励金额', {exact:true}).fill('100');
-  await p.getByLabel('每笔 DD 金额 / 单笔要求未知时填总额', {exact:true}).fill('500');
+  await p.getByLabel('DD 累计最低金额', {exact:true}).fill('500');
   await p.getByRole('button', {name:'保存奖励活动'}).click();
   const menu = () => p.getByRole('button', {name:'操作 独立版测试银行'});
   await menu().click();

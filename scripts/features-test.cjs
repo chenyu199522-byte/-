@@ -29,7 +29,7 @@ async function run(){
   await button(p,'DD条件检测').click();
   await expect(p.locator('.br-reference-grid a')).toHaveCount(9);
   for(const a of await p.locator('.br-reference-grid a').all())await a.click();
-  await button(p,'论坛与指南').click();
+  await button(p,'关闭对话框').click();await button(p,'论坛与指南').click();
   await expect(p.locator('.br-reference-grid a')).toHaveCount(3);
   for(const a of await p.locator('.br-reference-grid a').all())await a.click();
   const links=await app.evaluate(()=>globalThis.testLinks);

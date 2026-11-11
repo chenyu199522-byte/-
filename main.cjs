@@ -47,6 +47,8 @@ if (!app.requestSingleInstanceLock()) {
     const ai=createAIService({directory:app.getPath('userData'),safeStorage,atomicWrite,readOfferPage:createWebReader({BrowserWindow,session})});
     handle('ai:read',()=>ai.view());
     handle('ai:save',value=>ai.save(value));
+    handle('ai:connect',value=>ai.connect(value));
+    handle('ai:models',id=>ai.models(id));
     handle('ai:remove',id=>ai.remove(id));
     handle('ai:run',value=>ai.run(value));
     handle('ai:cancel',()=>ai.cancel());
@@ -113,16 +115,18 @@ if (!app.requestSingleInstanceLock()) {
       minWidth: Math.min(640,width), minHeight: Math.min(480,height),
       backgroundColor: '#101424', show: !app.commandLine.hasSwitch('headless'),
       webPreferences: {preload: path.join(__dirname, 'preload.cjs'), sandbox: true, contextIsolation: true, nodeIntegration: false}});
-    let scaleWithWindow = true;
+    let scaleWithWindow = false;
+    let overallScale = 100;
     function applyScale() {
       const [width,height] = win.getContentSize();
-      const factor = windowScale(width,height,scaleWithWindow);
+      const factor = windowScale(width,height,scaleWithWindow,overallScale);
       if (Math.abs(win.webContents.getZoomFactor() - factor) > 0.001) win.webContents.setZoomFactor(factor);
     }
     win.on('resize', applyScale);
     win.webContents.on('did-finish-load', applyScale);
-    handle('layout:scale', enabled => {
+    handle('layout:scale', (enabled, scale) => {
       scaleWithWindow = enabled !== false;
+      overallScale = typeof scale === 'number' && Number.isFinite(scale) ? Math.min(125,Math.max(50,scale)) : 100;
       applyScale();
     });
     handle('layout:name', name => {

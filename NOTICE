@@ -8,3 +8,5 @@ Bank reward tracking incorporates ideas and adapted logic from Bank Bonus Tracke
 https://github.com/pumpkinperson996/bank-bonus-tracker, under the MIT license.
 Full license texts for the adapted module and bundled renderer dependencies are in licenses/.
 Electron and Chromium licenses are included in the desktop distribution.
+
+Inter font is included under the SIL Open Font License 1.1; see licenses/Inter-OFL.txt.

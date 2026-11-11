@@ -21,7 +21,7 @@ import { rewardRepository } from "../../services/bank-rewards/repository";
 import {
   addDays,
   addMonths,
-  cycleBasisLabels, rewardCycleRange, rewardPayoutSchedule, payoutTermLabel,
+  ddRequirementLabel, cycleBasisLabels, rewardCycleRange, rewardPayoutSchedule, payoutTermLabel,
   money,
   todayISO,
   isISO,
@@ -71,7 +71,11 @@ export default function OfferEditor({
   onClose: () => void;
   onSaved: (s: RewardState) => void;
 }) {
-  const [o, setO] = useState({ ...initial }),
+  const [existingAccount] = useState(() => rewardRepository.read(user.id).accounts
+    .filter(a => a.offerId === initial.id && !a.historyOnly)
+    .sort((a,b) => b.openedOn.localeCompare(a.openedOn))[0]);
+  const [openedOn,setOpenedOn] = useState<string | null>(null);
+  const [o, setO] = useState<RewardOffer>({ ...initial, ddAmountMode:initial.ddAmountMode || (initial.ddCount?'per_deposit':'total') }),
     [rules, setRules] = useState(initialRules.map((r) => ({ ...r }))),
     [error, setError] = useState(""),
     [busy, setBusy] = useState(false),
@@ -130,7 +134,8 @@ export default function OfferEditor({
     setBusy(true);
     setError("");
     try {
-      onSaved(await rewardRepository.saveOffer(user.id, o, rules));
+      if (!o.rewardCycleCount && o.ddAmountMode === 'per_deposit' && !o.ddCount) throw new Error('请填写合格 DD 最低笔数，或改选累计总额。');
+      onSaved(await rewardRepository.saveOffer(user.id, o, rules, {openedOn:openedOn || ""}));
     } catch (e) {
       setError((e as Error).message);
     } finally {
@@ -220,9 +225,12 @@ export default function OfferEditor({
                     <option value="unreviewed">未处理</option>
                     <option value="ineligible">不符合资格</option>
                     <option value="denied">申请被拒</option>
-                    <option value="opened">已开户（账户详情另行记录）</option>
+                    <option value="opened">已开户</option>
                   </SettingsSelect>
                 </Field>
+                {o.applicationStatus === "opened" && (existingAccount
+                  ? <p className="br-hint">已关联账户 · 开户日期 {existingAccount.openedOn}。账户日期和明细可在账户详情中修改。</p>
+                  : <DateField label="实际开户日期 *" value={openedOn} onChange={setOpenedOn}/>)}
                 <DateField
                   label="活动开始日期"
                   value={o.startsOn}
@@ -248,16 +256,19 @@ export default function OfferEditor({
             <section className="br-section">
               <h2>奖励条件</h2>
               <div className="br-form-grid">
+                {!o.rewardCycleCount && <Field label="DD 金额计算方式"><SettingsSelect aria-label="DD 金额计算方式" value={o.ddAmountMode} onChange={e=>set('ddAmountMode',e.target.value as RewardOffer['ddAmountMode'])}>
+                  <option value="total">累计总额（可同时要求最低笔数）</option><option value="per_deposit">每笔金额达标（按合格笔数计算）</option>
+                </SettingsSelect></Field>}
                 {number(
                   "ddAmountCents",
-                  o.rewardCycleCount ? "每期工资 DD 累计最低金额" : "每笔 DD 金额 / 单笔要求未知时填总额",
+                  o.rewardCycleCount ? "每期工资 DD 累计最低金额" : o.ddAmountMode === "total" ? "DD 累计最低金额" : "每笔 DD 最低金额",
                   true,
                 )}
                 {number("rewardCycleCount", "连续考核期数（按期累计时填写）")}
                 {!!o.rewardCycleCount && <Field label="周期计算方式"><SettingsSelect aria-label="周期计算方式" value={o.cycleBasis || "opening"} onChange={e=>set("cycleBasis",e.target.value as RewardOffer["cycleBasis"])}>{Object.entries(cycleBasisLabels).map(([id,label])=><option value={id} key={id}>{label}</option>)}</SettingsSelect></Field>}
                 {!!o.rewardCycleCount && o.cycleBasis==="statement" && number("statementDay","每月账单截止日（1–31，短月取月底）")}
                 {!!o.rewardCycleCount && o.cycleBasis==="custom" && <p className="br-hint">在账户编辑里填写各期起止日期。</p>}
-                {o.rewardCycleCount ? number("cycleDebitCents","每期借记卡消费最低金额",true) : number("ddCount", "DD 次数（留空按累计金额）")}
+                {o.rewardCycleCount ? number("cycleDebitCents","每期借记卡消费最低金额",true) : number("ddCount", o.ddAmountMode === "total" ? "DD 最低笔数（可留空）" : "合格 DD 最低笔数")}
                 {number("cycleCreditCents",o.rewardCycleCount ? "每期信用卡消费最低金额" : "期限内信用卡消费最低金额",true)}
                 {!o.rewardCycleCount && number("deadlineDays", "条件截止期限（开户后天数）")}
                 {number("minHoldDays", "最低持有天数")}
@@ -302,8 +313,18 @@ export default function OfferEditor({
               <h2>存款金额与持有时间</h2>
               <div className="br-form-grid">
                 {text("promoCode","优惠码")}
-                {number("transactionGoal","合格交易笔数（独立于 DD）")}
-                {number("transactionDeadlineDays","合格交易期限（开户后天数）")}
+                <Field label="合格交易计算方式"><SettingsSelect aria-label="合格交易计算方式" value={o.transactionMode || 'total'} onChange={e=>set('transactionMode',e.target.value as RewardOffer['transactionMode'])}>
+                  <option value="total">活动期间累计</option><option value="periodic">每月 / 每期单独计算</option>
+                </SettingsSelect></Field>
+                {number("transactionGoal",o.transactionMode==='periodic'?"每期合格交易最低笔数":"合格交易累计最低笔数")}
+                {o.transactionMode==='periodic'?<>
+                  <Field label="合格交易周期"><SettingsSelect aria-label="合格交易周期" value={o.transactionCycleBasis || ''} onChange={e=>set('transactionCycleBasis',e.target.value as RewardOffer['transactionCycleBasis'])}>
+                    <option disabled value="">选择周期</option><option value="calendar">自然月</option><option value="statement">账单周期</option><option value="opening">开户日逐月</option>
+                  </SettingsSelect></Field>
+                  {o.transactionCycleBasis==='statement' && number('transactionStatementDay','交易账单截止日（1–31）')}
+                  {number('transactionCycleCount','交易考核期数（留空持续按期记录）')}
+                  <p className="br-hint">每期独立累计，超出的笔数不带到下一期。未填考核期数时持续记录，不判定整个活动已完成。</p>
+                </>:number("transactionDeadlineDays","合格交易期限（开户后天数）")}
                 {text("additionalConditions","其他必须完成的条件","例如网上银行注册；请核对后在账户里记录完成日期",true)}
               </div>
               <p className="br-hint">有余额维持条件时填写。存款与工资 DD 分别记录，持有时间会以进度条倒计时。</p>
@@ -573,7 +594,7 @@ export default function OfferEditor({
               </p>
               <Progress value={0} />
               <p className="br-hint">
-                {o.rewardCycleCount ? `连续 ${o.rewardCycleCount} 期 · 每期工资 DD ${money(o.ddAmountCents, o.currency)} + 借记卡消费 ${money(o.cycleDebitCents ?? 0,o.currency)}` : `DD ${o.ddCount || "—"} 次 · ${money(o.ddAmountCents, o.currency)}`}
+                {o.rewardCycleCount ? `连续 ${o.rewardCycleCount} 期 · 每期工资 DD ${money(o.ddAmountCents, o.currency)} + 借记卡消费 ${money(o.cycleDebitCents ?? 0,o.currency)}` : ddRequirementLabel(o)}
                 {!!o.cycleCreditCents && <> · 信用卡消费 {money(o.cycleCreditCents,o.currency)}</>}
               </p>
             </section>

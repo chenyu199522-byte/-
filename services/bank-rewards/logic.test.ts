@@ -453,3 +453,15 @@ it('supports credit-only one-time offers and uses the later condition completion
  expect(ddProgress(a,o,s,'2026-09-16')).toMatchObject({done:true,last:'2026-09-15'});
  o.deadlineDays=7;expect(ddProgress(a,o,s,'2026-09-16').done).toBe(false);
 });
+it('supports a combined DD total AND minimum count without changing legacy per-deposit rules',()=>{
+ const s=fixture(),o=s.offers[0],a=s.accounts[0];Object.assign(o,{ddAmountCents:500000,ddCount:2,ddAmountMode:'total'});
+ const event=(id:string,date:string,amountCents:number,kind:'dd'|'debit'='dd')=>({id,userId:'u',accountId:a.id,date,amountCents,kind,sourceNote:''});
+ s.ddEvents=[event('one','2026-09-05',500000)];expect(ddProgress(a,o,s,today)).toMatchObject({done:false,count:1,ratio:0.5,last:null});
+ s.ddEvents=[event('one','2026-09-05',200000),event('two','2026-09-12',300000)];
+ expect(ddProgress(a,o,s,today)).toMatchObject({done:true,count:2,totalCents:500000,last:'2026-09-12',ratio:1});
+ s.ddEvents=[event('one','2026-09-05',100000),event('two','2026-09-12',100000),event('debit','2026-09-13',500000,'debit'),event('late','2026-12-01',500000)];
+ expect(ddProgress(a,o,s,today)).toMatchObject({done:false,count:2,totalCents:200000,ratio:0.4,last:null});
+ s.ddEvents.push(event('three','2026-09-20',300000));expect(ddProgress(a,o,s,today)).toMatchObject({done:true,last:'2026-09-20'});
+ delete o.ddAmountMode;expect(ddProgress(a,o,s,today)).toMatchObject({done:false,count:0});
+ o.ddAmountMode='per_deposit';s.ddEvents=[event('one','2026-09-05',500000),event('two','2026-09-12',500000)];expect(ddProgress(a,o,s,today)).toMatchObject({done:true,count:2,last:'2026-09-12'});
+});

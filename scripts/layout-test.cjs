@@ -20,7 +20,7 @@ async function launch() {
 const open = p=>p.getByRole('button',{name:'编辑布局',exact:true}).click();
 const click = (p,name)=>p.getByRole('button',{name,exact:true}).click();
 const layoutPath=path.join(profile,'layout.json');
-async function sizing(p) {
+async function sizing(p,enabled=false) {
   // Drive the native window so that resize -> zoom -> CSS breakpoints run together.
   const device = await p.context().newCDPSession(p);
   for(const [width,height] of samples) {
@@ -30,7 +30,7 @@ async function sizing(p) {
       return {size:win.getContentSize(),scale:win.webContents.getZoomFactor()};
     },[width,height]);
     assert.equal(info.size[0],width);assert.equal(info.size[1],height);
-    assert.ok(Math.abs(info.scale-windowScale(width,height,true))<.002);
+    assert.ok(Math.abs(info.scale-windowScale(width,height,enabled,100))<.002);
     // A hidden native window can retain its previous compositor surface. Supply the
     // matching client area explicitly and verify the CSS viewport used by the page.
     const dpr=width===1536 ? 1.25 : width===1280 ? 1.5 : 1;
@@ -55,9 +55,10 @@ async function run() {
   await expect(p.locator('[data-testid=reward-row]')).toHaveCount(1);
   const records=fs.readFileSync(recordFile);
   await sizing(p);
+  await open(p);await click(p,'活动表格');await p.getByLabel('窄窗口优先显示关键列').check();await click(p,'保存布局');
   await click(p,'显示全部列');await expect(p.locator('thead th')).toHaveCount(11);
   await click(p,'恢复精简列');
-  await open(p);await p.getByRole('slider',{name:'界面字号'}).press('End');
+  await open(p);await p.getByLabel('随窗口等比例缩放').check();await p.getByRole('slider',{name:'界面字号'}).press('End');
   await p.getByRole('slider',{name:'页面边距'}).press('End');
   await click(p,'统计卡片');await p.getByLabel('显示已关账户').uncheck();
   await click(p,'上移进行中奖励');
@@ -65,7 +66,7 @@ async function run() {
   await click(p,'上移奖励金额');await p.getByRole('slider',{name:'奖励金额列宽'}).press('End');
   await click(p,'保存布局');
   assert.equal(JSON.parse(fs.readFileSync(layoutPath)).columns[0].width,460);
-  await sizing(p);
+  await sizing(p,true);
   assert.equal(await p.locator('thead th').first().innerText().then(s=>s.includes('奖励金额')),true);
   await open(p);await p.getByLabel('随窗口等比例缩放').uncheck();
   await expect.poll(()=>app.evaluate(({BrowserWindow})=>BrowserWindow.getAllWindows()[0].webContents.getZoomFactor())).toBe(1);

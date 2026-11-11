@@ -19,6 +19,7 @@ async function publicUrl(value,resolve=lookup) {
   if(!addresses.length || addresses.some(x=>!publicAddress(x.address)))throw new Error('不能读取本机或内网地址，请使用公开活动页面。');
   return url.href;
 }
+const pageReadScript='(()=>{const root=document.body.cloneNode(true);root.querySelectorAll("script,style,noscript").forEach(e=>e.remove());return {url:location.href,title:document.title,text:root.textContent.replace(/\\s+/g," ").trim().slice(0,100000)};})()';
 function createWebReader({BrowserWindow,session}) {
   return async function read(value,signal) {
     const url=await publicUrl(value);
@@ -46,7 +47,7 @@ function createWebReader({BrowserWindow,session}) {
       for(let i=0;i<14;i++){
         if(signal.aborted)throw new Error('读取已取消。');
         await new Promise(r=>setTimeout(r,600));
-        result=await window.webContents.executeJavaScript('(()=>{const root=document.body.cloneNode(true);root.querySelectorAll("script,style,noscript").forEach(e=>e.remove());return {url:location.href,title:document.title,text:root.textContent.replace(/\\\\s+/g," ").trim().slice(0,100000)};})()');
+        result=await window.webContents.executeJavaScript(pageReadScript);
         if(result.text.length>500 && result.text===previous)stable++;else stable=0;
         if(stable>=3)break;previous=result.text;
       }
@@ -57,4 +58,4 @@ function createWebReader({BrowserWindow,session}) {
     } finally {clearTimeout(timer);closed=true;signal.removeEventListener('abort',stop);stop();await isolated.clearStorageData().catch(()=>{});}
   };
 }
-module.exports={publicAddress,publicUrl,createWebReader};
+module.exports={publicAddress,publicUrl,createWebReader,pageReadScript};

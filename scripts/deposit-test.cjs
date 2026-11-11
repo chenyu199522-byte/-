@@ -13,7 +13,7 @@ const button=(p,name)=>p.getByRole('button',{name,exact:true});
  app=await _electron.launch({executablePath:dev?require('electron'):process.argv[2]||path.resolve('release/win-unpacked/金羊毛.exe'),args:[...(dev?['.']:[]),'--headless','--user-data-dir='+root]});
  const p=await app.firstWindow();p.setDefaultTimeout(15000);
  await app.evaluate(({BrowserWindow})=>BrowserWindow.getAllWindows()[0].webContents.setBackgroundThrottling(false));
- await expect(p.getByLabel('规则与提醒').getByText('DEMO26')).toBeVisible();
+ await p.locator('.br-condition-notes summary').click();await expect(p.locator('.br-condition-notes')).toContainText('DEMO26');
  await button(p,'按月核对：演示银行').click();
  const editor=p.getByRole('region',{name:'存款与合格交易记录',exact:true});
  await editor.getByLabel('当天合格资金余额',{exact:true}).fill('10000');
@@ -39,7 +39,7 @@ const button=(p,name)=>p.getByRole('button',{name,exact:true});
   await cdp.send('Emulation.setDeviceMetricsOverride',{width,height,deviceScaleFactor:1,mobile:false});
   await p.evaluate(()=>new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r))));
   const geom=await p.evaluate(()=>{
-   const layout=document.querySelector('.br-condition-layout'),board=layout.querySelector('.br-condition-board'),reminders=layout.querySelector('.br-condition-reminders');
+   const layout=document.querySelector('.br-condition-layout'),board=layout.querySelector('.br-condition-board'),reminders=layout.querySelector('.br-condition-notes');
    const b=board.getBoundingClientRect(),r=reminders.getBoundingClientRect();
    return {overflow:document.documentElement.scrollWidth>innerWidth+2,overlap:!(r.left>=b.right-2||r.top>=b.bottom-2),remindersOverflow:reminders.scrollWidth>reminders.clientWidth+2};
   });
@@ -50,7 +50,7 @@ const button=(p,name)=>p.getByRole('button',{name,exact:true});
  await button(p,'编辑布局').click();await p.getByRole('slider',{name:'界面字号'}).press('End');await button(p,'保存布局').click();
  for(const width of [1280,640]) {
   await cdp.send('Emulation.setDeviceMetricsOverride',{width,height:900,deviceScaleFactor:1,mobile:false});
-  const bounds=await p.evaluate(()=>{const layout=document.querySelector('.br-condition-layout'),b=layout.querySelector('.br-condition-board').getBoundingClientRect(),r=layout.querySelector('.br-condition-reminders').getBoundingClientRect();return {overflow:document.documentElement.scrollWidth>innerWidth+2,overlap:!(r.left>=b.right-2||r.top>=b.bottom-2)};});
+  const bounds=await p.evaluate(()=>{const layout=document.querySelector('.br-condition-layout'),b=layout.querySelector('.br-condition-board').getBoundingClientRect(),r=layout.querySelector('.br-condition-notes').getBoundingClientRect();return {overflow:document.documentElement.scrollWidth>innerWidth+2,overlap:!(r.left>=b.right-2||r.top>=b.bottom-2)};});
   assert.equal(bounds.overflow,false);assert.equal(bounds.overlap,false);
  }
  await cdp.send('Emulation.clearDeviceMetricsOverride');

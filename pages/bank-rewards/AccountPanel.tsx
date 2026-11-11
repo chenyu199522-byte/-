@@ -1,3 +1,4 @@
+import BatchRecordDialog from "./BatchRecordDialog";
 import DepositRecords from './DepositRecords';
 import ConditionProgress from './ConditionProgress';
 import EvidenceImages from "./EvidenceImages";
@@ -44,8 +45,12 @@ import {
   Progress,
 } from "./ui";
 export type AccountAction =
-  "open" | "new" | "history" | "edit" | "dd" | "receipt" | "close";
-export function AccountDialog({
+  "open" | "new" | "history" | "edit" | "dd" | "balance" | "balance-edit" | "receipt" | "close";
+export function AccountDialog(props:Parameters<typeof SingleAccountDialog>[0]) {
+  if(props.account && !props.ddEvent && (props.mode==='dd'||props.mode==='balance'))return <BatchRecordDialog userId={props.user.id} offer={props.offer} account={props.account} initialKind={props.mode==='balance'?'balance':'dd'} onClose={props.onClose} onSaved={props.onSaved}/>;
+  return <SingleAccountDialog {...props}/>;
+}
+function SingleAccountDialog({
   user,
   offer,
   account,
@@ -62,19 +67,26 @@ export function AccountDialog({
   onClose: () => void;
   onSaved: (s: RewardState) => void;
 }) {
+  const latestBalance=[...(account?.depositBalances||[])].filter(r=>r.date<=(account?.closedOn||todayISO())).sort((x,y)=>x.date.localeCompare(y.date)).at(-1);
+  const editingBalance=mode==='balance-edit';
+  const balanceEntry=mode==='balance'||editingBalance;
+  const recording=mode==='dd'||balanceEntry;
   const history = mode === "history",
     title = {
       open: account ? "编辑账户记录" : "记录开户",
       new: "再次开户（新增账户）",
       history: "补录历史账户",
       edit: "编辑账户与历史日期",
-      dd: ddEvent ? "编辑 DD / 消费记录" : "工资 DD / 卡片消费",
+      dd: ddEvent ? "编辑 DD / 消费记录" : offer.depositGoalCents ? "记录 DD / 消费 / 存款" : "工资 DD / 卡片消费",
+      balance:"添加存款记录",
+      "balance-edit":"修改存款金额",
       receipt: "记录奖励到账",
       close: "记录关户",
     }[mode];
   const submitting = useRef(false);
   const creationId = useRef(crypto.randomUUID());
   const ddId = useRef(ddEvent?.id || crypto.randomUUID());
+  const balanceId=useRef(editingBalance ? latestBalance?.id || crypto.randomUUID() : crypto.randomUUID());
   const [a, setA] = useState<Partial<RewardAccount>>({
     ...account,
     ...(offer.rewardMode==='separate'?{componentReceipts:account?.componentReceipts||{}}:{}),
@@ -101,10 +113,10 @@ export function AccountDialog({
     incomeCurrency: account?.incomeCurrency || user.currency || "USD",
     exchangeRate: account?.exchangeRate || null,
   });
-  const [date, setDate] = useState<string | null>(ddEvent?.date || todayISO()),
-    [amount, setAmount] = useState<number | null>(ddEvent?.amountCents ?? offer.ddAmountCents),
-    [entryKind, setEntryKind] = useState<"debit"|"dd"|"credit">(ddEvent?.kind || "dd"),
-    [source, setSource] = useState(ddEvent?.sourceNote || ""),
+  const [date, setDate] = useState<string | null>((editingBalance ? latestBalance?.date : ddEvent?.date) || todayISO()),
+    [amount, setAmount] = useState<number | null>(editingBalance ? latestBalance?.amountCents ?? null : balanceEntry ? null : ddEvent?.amountCents ?? offer.ddAmountCents),
+    [entryKind, setEntryKind] = useState<"debit"|"dd"|"credit"|"balance">(balanceEntry ? "balance" : ddEvent?.kind || "dd"),
+    [source, setSource] = useState((editingBalance ? latestBalance?.note : ddEvent?.sourceNote) || ""),
     [error, setError] = useState(""),
     [busy, setBusy] = useState(false),
     [confirmEarly, setConfirmEarly] = useState(false);
@@ -133,15 +145,18 @@ export function AccountDialog({
     submitting.current = true;
     setBusy(true);
     try {
+      if (recording && entryKind==='balance' && amount===null) throw new Error('请填写当天实际存款余额。');
       const s =
-        mode === "dd"
+        recording && entryKind==='balance'
+          ? await rewardRepository.saveDepositBalance(user.id,account!.id,{id:balanceId.current,date:date||'',amountCents:amount!,note:source})
+          : recording
           ? await rewardRepository.saveDd(user.id, {
               id: ddId.current,
               userId: user.id,
               accountId: account!.id,
               date: date || "",
               amountCents: amount ?? 0,
-              kind:entryKind, sourceNote: source,
+              kind:entryKind as "dd"|"debit"|"credit", sourceNote: source,
             })
           : await rewardRepository.saveAccount(user.id, offer.id, a, { newAccount: mode === "new" || history, creationId: account ? undefined : creationId.current });
       onSaved(s);
@@ -167,25 +182,26 @@ export function AccountDialog({
           </div>
         )}
         <div className="br-form-grid">
-          {mode === "dd" ? (
+          {recording ? (
             <>
-              {<Field label="记录类型"><select aria-label="记录类型" value={entryKind} onChange={e=>{setEntryKind(e.target.value as "dd"|"debit"|"credit");setAmount(null);}}><option value="dd">工资直接存款</option><option value="debit">借记卡消费</option><option value="credit">信用卡消费</option></select></Field>}
+              {<Field label="记录类型"><select aria-label="记录类型" value={entryKind} disabled={editingBalance} onChange={e=>{setEntryKind(e.target.value as typeof entryKind);setAmount(null);}}><option value="dd">工资直接存款</option><option value="debit">借记卡消费</option><option value="credit">信用卡消费</option>{!!offer.depositGoalCents && !ddEvent && <option value="balance">存款余额</option>}</select></Field>}
               <DateField
-                label={entryKind!=="dd" ? "消费日期 *" : "DD 到账日期 *"}
+                label={entryKind==="balance" ? "余额日期 *" : entryKind!=="dd" ? "消费日期 *" : "DD 到账日期 *"}
                 value={date}
                 onChange={setDate}
               />
               <NumberField
-                label={entryKind!=="dd" ? "消费金额 *" : "到账金额 *"}
+                label={entryKind==="balance" ? "当天存款余额 *" : entryKind!=="dd" ? "消费金额 *" : "到账金额 *"}
                 money
                 value={amount}
                 onChange={setAmount}
               />
+              {entryKind==='balance' && <p className="br-hint">{editingBalance?'修改最近一笔余额记录；实际余额发生变化时，请添加新记录以保留历史。':'填写当天账户内符合活动要求的实际余额，不是本次转入金额。同一天保留一条余额记录；已有记录可用“修改金额”更正。'}</p>}
               <Field label="来源 / 备注">
                 <input
                   value={source}
                   onChange={(e) => setSource(e.target.value)}
-                  placeholder={entryKind!=="dd" ? "例如商户名称" : "例如工资来源"}
+                  placeholder={entryKind==="balance" ? "例如新资金存入、余额调整" : entryKind!=="dd" ? "例如商户名称" : "例如工资来源"}
                 />
               </Field>
             </>
@@ -496,7 +512,7 @@ export default function AccountPanel({
                           ? "尚未完成"
                           : "要求待核对"}
                     </p>
-                    {dd && <ConditionProgress key={a.id} offer={offer} account={a} dd={dd} today={today} detail/>}
+                    {dd && <ConditionProgress key={a.id} offer={offer} account={a} dd={dd} today={today} detail onDepositAction={edit=>onAction(edit?"balance-edit":"balance",a)}/>}
                     {(!!offer.depositGoalCents||!!offer.transactionGoal)&&<DepositRecords key={"records-"+a.id} userId={user.id} account={a} offer={offer} onSaved={onSaved}/>}
                     {offer.additionalConditions&&<div className="br-record-editor"><p>{offer.additionalConditions}</p><button onClick={()=>onAction('edit',a)}>记录其他条件完成日期</button></div>}
                     <p className="br-hint">{offer.rewardCycleCount ? "按实际日期登记工资 DD、借记卡或信用卡消费。每期独立累计。" : "在下方编辑或删除已有记录；记录 DD 用于新增到账。"}</p>
